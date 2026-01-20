@@ -1,0 +1,7 @@
+{
+  "name": "Mark-Eng - Manufacturing Sales & Marketing Hub",
+  "description": "A comprehensive B2B management suite for manufacturing and additive manufacturing companies, featuring customer CRM, multi-technology pricing records, and global expo tracking.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
