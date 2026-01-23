@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { supabase } from "./services/supabaseClient";
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { CustomersView } from './views/CustomersView';
@@ -9,44 +10,95 @@ import { ExposView } from './views/ExposView';
 import { MarketingTeamView } from './views/MarketingTeamView';
 import { DataManagementView } from './views/DataManagementView';
 import { VisitPlanView } from './views/VisitPlanView';
+import { ProjectDetailsView } from './views/ProjectDetailsView';
 import { UserRole, Customer, Expo, User, Visit, VisitStatus } from './types';
-import { MOCK_CUSTOMERS, MOCK_EXPOS, SYSTEM_ADMINS, MARKETING_TEAM as DEFAULT_MARKETING_TEAM } from './constants';
+import { SYSTEM_ADMINS, MARKETING_TEAM as DEFAULT_MARKETING_TEAM } from './constants';
+import { api } from './services/api';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [currentUser, setCurrentUser] = useState<User>(SYSTEM_ADMINS[0]);
-  
-  // Application State with Persistence logic
-  const [customers, setCustomers] = useState<Customer[]>(() => {
-    const saved = localStorage.getItem('enging_customers');
-    return saved ? JSON.parse(saved) : MOCK_CUSTOMERS;
-  });
 
-  const [expos, setExpos] = useState<Expo[]>(() => {
-    const saved = localStorage.getItem('enging_expos');
-    return saved ? JSON.parse(saved) : MOCK_EXPOS;
-  });
+  // Application State
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [expos, setExpos] = useState<Expo[]>([]);
+  const [marketingTeam, setMarketingTeam] = useState(DEFAULT_MARKETING_TEAM);
+  const [visits, setVisits] = useState<Visit[]>([]);
 
-  const [marketingTeam, setMarketingTeam] = useState(() => {
-    const saved = localStorage.getItem('enging_marketing_team');
-    return saved ? JSON.parse(saved) : DEFAULT_MARKETING_TEAM;
-  });
+  const [loading, setLoading] = useState(true);
 
-  const [visits, setVisits] = useState<Visit[]>(() => {
-    const saved = localStorage.getItem('enging_visits');
-    return saved ? JSON.parse(saved) : [];
-  });
+  // Load Data from Supabase
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const [fetchedCustomers, fetchedExpos, fetchedVisits] = await Promise.all([
+          api.customers.fetchAll(),
+          api.expos.fetchAll(),
+          api.visits.fetchAll()
+        ]);
+        setCustomers(fetchedCustomers);
+        setExpos(fetchedExpos);
+        setVisits(fetchedVisits);
+      } catch (error) {
+        console.error("Failed to fetch data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
 
-  // Centralized Deletion with Cascade Logic
-  const deleteCustomer = (id: string) => {
-    // 1. Remove Customer
-    setCustomers(prev => prev.filter(c => c.id !== id));
-    // 2. Cascade Remove Associated Visits
-    setVisits(prev => prev.filter(v => v.customerId !== id));
-    
-    // Logic to notify user could be added here
-    console.log(`Personnel ${currentUser.name} purged customer ${id} and all related logs.`);
+  // --- Handlers for Data Persistence ---
+
+  // CUSTOMERS
+  const handleAddCustomer = async (newCustomer: Customer) => {
+    try {
+      // Optimistic update
+      setCustomers(prev => [newCustomer, ...prev]);
+      const savedCustomer = await api.customers.create(newCustomer);
+      // Update with real ID from server
+      setCustomers(prev => prev.map(c => c.id === newCustomer.id ? savedCustomer : c));
+    } catch (e: any) {
+      console.error("Add customer failed", e);
+      alert(`Failed to add customer: ${e.message || JSON.stringify(e)}`);
+    }
   };
+
+  const handleUpdateCustomer = async (updatedCustomer: Customer) => {
+    try {
+      setCustomers(prev => prev.map(c => c.id === updatedCustomer.id ? updatedCustomer : c));
+      await api.customers.update(updatedCustomer);
+    } catch (e: any) {
+      console.error("Update customer failed", e);
+      alert(`Failed to update customer: ${e.message || JSON.stringify(e)}`);
+    }
+  };
+
+  const handleDeleteCustomer = async (id: string) => {
+    try {
+      setCustomers(prev => prev.filter(c => c.id !== id));
+      setVisits(prev => prev.filter(v => v.customerId !== id));
+      await api.customers.delete(id);
+    } catch (e) {
+      console.error("Delete customer failed", e);
+    }
+  };
+
+  // EXPOS
+  const handleAddExpo = async (newExpo: Expo) => {
+    setExpos(prev => [...prev, newExpo]);
+    await api.expos.create(newExpo);
+  };
+
+  // VISITS
+  const handleAddVisit = async (newVisit: Visit) => {
+    setVisits(prev => [...prev, newVisit]);
+    await api.visits.create(newVisit);
+  };
+
+  // Centralized Deletion with Cascade Logic (already covered by handleDeleteCustomer, but keeping signature)
+  const deleteCustomer = handleDeleteCustomer;
 
   // Handle cross-component navigation
   useEffect(() => {
@@ -57,38 +109,31 @@ const App: React.FC = () => {
     return () => window.removeEventListener('nav-tab', handleNav);
   }, []);
 
-  // Effect to save data whenever it changes
-  useEffect(() => {
-    localStorage.setItem('enging_customers', JSON.stringify(customers));
-  }, [customers]);
-
-  useEffect(() => {
-    localStorage.setItem('enging_expos', JSON.stringify(expos));
-  }, [expos]);
-
-  useEffect(() => {
-    localStorage.setItem('enging_marketing_team', JSON.stringify(marketingTeam));
-  }, [marketingTeam]);
-
-  useEffect(() => {
-    localStorage.setItem('enging_visits', JSON.stringify(visits));
-  }, [visits]);
-
   const renderContent = () => {
+    if (loading) {
+      return <div className="flex h-screen items-center justify-center p-20">Loading data from Supabase...</div>;
+    }
+
     switch (activeTab) {
       case 'dashboard':
         return <Dashboard customers={customers} expos={expos} marketingTeam={marketingTeam} />;
       case 'customers':
         return (
-          <CustomersView 
-            customers={customers} 
-            setCustomers={setCustomers} 
+          <CustomersView
+            customers={customers}
+            setCustomers={setCustomers} // We might need to keep this for now, but better to use handlers
             onDeleteCustomer={deleteCustomer}
-            currentUser={currentUser} 
+            onSaveCustomer={async (c, isNew) => {
+              if (isNew) await handleAddCustomer(c);
+              else await handleUpdateCustomer(c);
+            }}
+            currentUser={currentUser}
           />
         );
       case 'visit-plan':
         return <VisitPlanView customers={customers} visits={visits} setVisits={setVisits} currentUser={currentUser} />;
+      case 'project-details':
+        return <ProjectDetailsView />;
       case 'map':
         return <MapView customers={customers} />;
       case 'pricing':
@@ -99,10 +144,10 @@ const App: React.FC = () => {
         return <MarketingTeamView team={marketingTeam} setTeam={setMarketingTeam} currentUser={currentUser} />;
       case 'data-mgmt':
         return (
-          <DataManagementView 
-            customers={customers} 
-            setCustomers={setCustomers} 
-            expos={expos} 
+          <DataManagementView
+            customers={customers}
+            setCustomers={setCustomers}
+            expos={expos}
             setExpos={setExpos}
             marketingTeam={marketingTeam}
             visits={visits}
@@ -118,7 +163,7 @@ const App: React.FC = () => {
             <p className="text-slate-500 max-w-sm mt-3 text-sm leading-relaxed">
               Our AI is currently synthesizing your historical manufacturing data into actionable insights based on your latest Excel imports.
             </p>
-            <button 
+            <button
               onClick={() => setActiveTab('dashboard')}
               className="mt-8 px-8 py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition-all"
             >

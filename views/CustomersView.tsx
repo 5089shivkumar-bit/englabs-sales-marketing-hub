@@ -1,11 +1,11 @@
 
 import React, { useState, useMemo } from 'react';
-import { 
-  Plus, 
-  Filter, 
-  Search, 
-  MapPin, 
-  Mail, 
+import {
+  Plus,
+  Filter,
+  Search,
+  MapPin,
+  Mail,
   Briefcase,
   ChevronRight,
   FileSpreadsheet,
@@ -34,10 +34,11 @@ interface CustomersViewProps {
   customers: Customer[];
   setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
   onDeleteCustomer: (id: string) => void;
+  onSaveCustomer?: (customer: Customer, isNew: boolean) => void;
   currentUser: User;
 }
 
-export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCustomers, onDeleteCustomer, currentUser }) => {
+export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCustomers, onDeleteCustomer, onSaveCustomer, currentUser }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedZone, setSelectedZone] = useState('All Zones');
   const [selectedState, setSelectedState] = useState('All States');
@@ -90,7 +91,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
       lastModifiedBy: currentUser.name,
       updatedAt: dateUtils.getISTTimestamp()
     })).filter(c => c.name.length > 0);
-    
+
     setCustomers(prev => {
       const existingNames = new Set(prev.map(c => c.name.toLowerCase().trim()));
       const uniqueNew = newCustomers.filter(c => !existingNames.has(c.name.toLowerCase().trim()));
@@ -102,10 +103,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
   const handleActionDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     e.preventDefault();
-    
+
     const customer = customers.find(c => c.id === id);
     const customerName = customer?.name || "this account";
-    
+
     // Final Personnel Confirmation
     const confirmed = window.confirm(
       `REGISTRY PURGE AUTHORIZATION\n\n` +
@@ -140,42 +141,44 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
     setShowAddModal(true);
   };
 
-  const handleSaveCustomer = (e: React.FormEvent) => {
+  const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formCust.name || !formCust.city) return;
 
     const timestamp = dateUtils.getISTTimestamp();
+    let customerToSave: Customer;
 
     if (editingCustomer) {
-      setCustomers(prev => prev.map(c => {
-        if (c.id === editingCustomer.id) {
-          const updated = { ...c };
-          updated.name = formCust.name;
-          updated.city = formCust.city;
-          updated.state = formCust.state || 'N/A';
-          updated.industry = formCust.industry;
-          updated.annualTurnover = parseFloat(formCust.annualTurnover) || 0;
-          updated.lastModifiedBy = currentUser.name;
-          updated.updatedAt = timestamp;
-          if (updated.contacts.length > 0) {
-            updated.contacts[0].name = formCust.contactName;
-            updated.contacts[0].email = formCust.contactEmail;
-          } else if (formCust.contactName) {
-            updated.contacts = [{
-              id: `cp-${Date.now()}`,
-              name: formCust.contactName,
-              designation: 'Primary Contact',
-              email: formCust.contactEmail,
-              phone: ''
-            }];
-          }
-          return updated;
-        }
-        return c;
-      }));
+      customerToSave = {
+        ...editingCustomer,
+        name: formCust.name,
+        city: formCust.city,
+        state: formCust.state || 'N/A',
+        industry: formCust.industry,
+        annualTurnover: parseFloat(formCust.annualTurnover) || 0,
+        lastModifiedBy: currentUser.name,
+        updatedAt: timestamp,
+        contacts: editingCustomer.contacts.length > 0
+          ? [{ ...editingCustomer.contacts[0], name: formCust.contactName, email: formCust.contactEmail }]
+          : formCust.contactName ? [{
+            id: `cp-${Date.now()}`,
+            name: formCust.contactName,
+            designation: 'Primary Contact',
+            email: formCust.contactEmail,
+            phone: ''
+          }] : []
+      };
+
+      if (onSaveCustomer) {
+        await onSaveCustomer(customerToSave, false);
+      } else {
+        // Fallback for local update if prop missing
+        setCustomers(prev => prev.map(c => c.id === customerToSave.id ? customerToSave : c));
+      }
+
     } else {
-      const customer: Customer = {
-        id: `c-${Date.now()}`,
+      customerToSave = {
+        id: `c-${Date.now()}`, // Temporary ID
         name: formCust.name,
         city: formCust.city,
         state: formCust.state || 'N/A',
@@ -194,7 +197,12 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
         lastModifiedBy: currentUser.name,
         updatedAt: timestamp
       };
-      setCustomers(prev => [customer, ...prev]);
+
+      if (onSaveCustomer) {
+        await onSaveCustomer(customerToSave, true);
+      } else {
+        setCustomers(prev => [customerToSave, ...prev]);
+      }
     }
 
     setShowAddModal(false);
@@ -216,8 +224,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
 
   const filteredCustomers = customers.filter(c => {
     const matchesSearch = c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         c.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         c.state?.toLowerCase().includes(searchTerm.toLowerCase());
+      c.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.state?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesZone = selectedZone === 'All Zones' || getZoneForCustomer(c) === selectedZone;
     const matchesState = selectedState === 'All States' || c.state === selectedState;
     const matchesCity = selectedCity === 'All Cities' || c.city.trim() === selectedCity;
@@ -257,13 +265,13 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
           <p className="text-slate-500 font-medium">Enterprise data management for {customers.length} manufacturing accounts.</p>
         </div>
         <div className="flex items-center space-x-3">
-          <button 
+          <button
             onClick={() => setShowImport(true)}
             className="flex items-center px-6 py-4 border border-slate-200 bg-white text-slate-700 rounded-2xl hover:bg-slate-50 text-sm font-bold transition-all shadow-sm"
           >
             <FileSpreadsheet size={18} className="mr-3 text-blue-500" /> Bulk Excel Ingest
           </button>
-          <button 
+          <button
             onClick={() => {
               setEditingCustomer(null);
               setFormCust({ name: '', city: '', state: '', industry: '', annualTurnover: '', contactName: '', contactEmail: '' });
@@ -284,11 +292,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
               <button
                 key={zone}
                 onClick={() => setSelectedZone(zone)}
-                className={`px-5 py-2.5 rounded-xl text-xs font-black whitespace-nowrap transition-all uppercase tracking-tight border ${
-                  selectedZone === zone 
-                    ? 'bg-slate-900 text-white border-slate-900 shadow-lg' 
-                    : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
-                }`}
+                className={`px-5 py-2.5 rounded-xl text-xs font-black whitespace-nowrap transition-all uppercase tracking-tight border ${selectedZone === zone
+                  ? 'bg-slate-900 text-white border-slate-900 shadow-lg'
+                  : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
+                  }`}
               >
                 {zone}
               </button>
@@ -297,9 +304,9 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
 
           <div className="relative flex-1 max-w-lg">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Search by company, city, state..." 
+            <input
+              type="text"
+              placeholder="Search by company, city, state..."
               className="w-full pl-12 pr-6 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -323,15 +330,15 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredCustomers.map(customer => (
-                    <tr 
-                      key={customer.id} 
+                    <tr
+                      key={customer.id}
                       className={`hover:bg-slate-50/50 cursor-pointer transition-colors group ${selectedCustomer?.id === customer.id ? 'bg-blue-50/40' : ''}`}
                       onClick={() => setSelectedCustomer(customer)}
                     >
                       <td className="px-8 py-5">
                         <div className="flex items-center space-x-4">
                           <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center font-black text-slate-500 text-base shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-all">
-                            {customer.name?.substring(0,2).toUpperCase()}
+                            {customer.name?.substring(0, 2).toUpperCase()}
                           </div>
                           <div>
                             <p className="text-sm font-bold text-slate-900 leading-tight">{customer.name}</p>
@@ -350,7 +357,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                       <td className="px-8 py-5">
                         <div className="flex items-center justify-center space-x-3">
                           {/* Exact Styling from Screenshot: Pen/Edit Icon */}
-                          <button 
+                          <button
                             onClick={(e) => handleOpenEdit(e, customer)}
                             className="w-11 h-11 flex items-center justify-center bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-all border border-slate-100/50 shadow-sm"
                             title="Edit Personnel Entry"
@@ -358,7 +365,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                             <PencilLine size={18} />
                           </button>
                           {/* Exact Styling from Screenshot: Trash/Delete Icon */}
-                          <button 
+                          <button
                             onClick={(e) => handleActionDelete(e, customer.id)}
                             className="w-11 h-11 flex items-center justify-center bg-rose-50 text-rose-400 hover:bg-rose-600 hover:text-white rounded-xl transition-all border border-rose-100/50 shadow-sm active:scale-90"
                             title="Remove Client Permanently"
@@ -430,13 +437,13 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                 </div>
 
                 <div className="pt-10 grid grid-cols-2 gap-4">
-                  <button 
+                  <button
                     onClick={(e) => handleOpenEdit(e, selectedCustomer)}
                     className="py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center justify-center shadow-xl active:scale-95"
                   >
                     <Edit3 size={16} className="mr-3" /> Update Record
                   </button>
-                  <button 
+                  <button
                     onClick={(e) => handleActionDelete(e, selectedCustomer.id)}
                     className="py-5 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center justify-center shadow-xl shadow-rose-200 active:scale-95"
                   >
@@ -473,27 +480,27 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Company Name*</label>
-                    <input required type="text" value={formCust.name} onChange={e => setFormCust({...formCust, name: e.target.value})} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="Bharat Aerospace" />
+                    <input required type="text" value={formCust.name} onChange={e => setFormCust({ ...formCust, name: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="Bharat Aerospace" />
                   </div>
                   <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Primary Industry</label>
-                    <input type="text" value={formCust.industry} onChange={e => setFormCust({...formCust, industry: e.target.value})} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="e.g. Automotive" />
+                    <input type="text" value={formCust.industry} onChange={e => setFormCust({ ...formCust, industry: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="e.g. Automotive" />
                   </div>
                   <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">City Hub*</label>
-                    <input required type="text" value={formCust.city} onChange={e => setFormCust({...formCust, city: e.target.value})} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="Bengaluru" />
+                    <input required type="text" value={formCust.city} onChange={e => setFormCust({ ...formCust, city: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="Bengaluru" />
                   </div>
                   <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">State</label>
-                    <input type="text" value={formCust.state} onChange={e => setFormCust({...formCust, state: e.target.value})} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="Karnataka" />
+                    <input type="text" value={formCust.state} onChange={e => setFormCust({ ...formCust, state: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="Karnataka" />
                   </div>
                   <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Annual Revenue (INR)</label>
-                    <input type="number" value={formCust.annualTurnover} onChange={e => setFormCust({...formCust, annualTurnover: e.target.value})} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="50000000" />
+                    <input type="number" value={formCust.annualTurnover} onChange={e => setFormCust({ ...formCust, annualTurnover: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="50000000" />
                   </div>
                   <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Primary Stakeholder</label>
-                    <input type="text" value={formCust.contactName} onChange={e => setFormCust({...formCust, contactName: e.target.value})} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="Rahul Sharma" />
+                    <input type="text" value={formCust.contactName} onChange={e => setFormCust({ ...formCust, contactName: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="Rahul Sharma" />
                   </div>
                 </div>
               </div>
@@ -511,11 +518,11 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
       )}
 
       {showImport && (
-        <ExcelImporter 
-          type="customers" 
-          targetFields={customerFields} 
-          onImport={handleImport} 
-          onClose={() => setShowImport(false)} 
+        <ExcelImporter
+          type="customers"
+          targetFields={customerFields}
+          onImport={handleImport}
+          onClose={() => setShowImport(false)}
         />
       )}
     </div>

@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  LayoutDashboard, 
-  Users, 
-  DollarSign, 
-  Calendar, 
-  BarChart3, 
-  Menu, 
+import {
+  LayoutDashboard,
+  Users,
+  DollarSign,
+  Calendar,
+  BarChart3,
+  Menu,
   X,
   LogOut,
   Bell,
@@ -19,7 +19,8 @@ import {
   Award,
   Clock,
   Navigation2,
-  Zap
+  Zap,
+  ClipboardList
 } from 'lucide-react';
 import { UserRole, User as AppUser } from '../types';
 import { SYSTEM_ADMINS, MARKETING_TEAM } from '../constants';
@@ -35,11 +36,10 @@ interface SidebarItemProps {
 const SidebarItem: React.FC<SidebarItemProps> = ({ icon: Icon, label, active, onClick }) => (
   <button
     onClick={onClick}
-    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-      active 
-        ? 'bg-blue-600 text-white shadow-md' 
-        : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-    }`}
+    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${active
+      ? 'bg-blue-600 text-white shadow-md'
+      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+      }`}
   >
     <Icon size={20} />
     <span className="font-medium">{label}</span>
@@ -70,6 +70,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'customers', label: 'Customers', icon: Users },
+    { id: 'project-details', label: 'Project Management', icon: ClipboardList },
     { id: 'visit-plan', label: 'Visit Plan', icon: Navigation2 },
     { id: 'map', label: 'Market Map', icon: MapIcon },
     { id: 'pricing', label: 'Pricing Records', icon: DollarSign },
@@ -105,7 +106,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {isSidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
@@ -146,7 +147,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                 <UserCheck size={12} className="mr-1.5" /> Registry Verified
               </div>
             </div>
-            <SidebarItem icon={LogOut} label="Sign Out" active={false} onClick={() => {}} />
+            <SidebarItem icon={LogOut} label="Sign Out" active={false} onClick={() => { }} />
           </div>
         </div>
       </aside>
@@ -154,7 +155,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <header className="h-16 bg-white border-b border-slate-200 px-4 lg:px-8 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center space-x-4">
-            <button 
+            <button
               className="lg:hidden p-2 hover:bg-slate-100 rounded-lg text-slate-600"
               onClick={() => setIsSidebarOpen(true)}
             >
@@ -162,9 +163,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
             </button>
             <div className="hidden md:flex items-center bg-slate-100 px-3 py-1.5 rounded-lg w-64 border border-slate-200">
               <Search size={18} className="text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Search master records..." 
+              <input
+                type="text"
+                placeholder="Search master records..."
                 className="bg-transparent border-none focus:outline-none text-sm ml-2 w-full"
               />
             </div>
@@ -172,7 +173,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
 
           <div className="flex items-center space-x-3">
             {/* Global Anti-Gravity Export Trigger */}
-            <button 
+            <button
               onClick={triggerGlobalExport}
               className="hidden lg:flex items-center space-x-2 bg-slate-900 text-white px-4 py-2 rounded-xl border border-slate-800 shadow-lg hover:bg-blue-600 transition-all active:scale-95 group"
               title="Quick Anti-Gravity Sync"
@@ -190,11 +191,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
               <Bell size={20} />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
             </button>
-            
+
             <div className="h-8 w-px bg-slate-200 mx-1"></div>
-            
+
             <div className="relative">
-              <button 
+              <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 className="flex items-center space-x-3 ml-2 hover:bg-slate-50 p-1.5 rounded-xl transition-colors active:scale-95"
               >
@@ -202,9 +203,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                   <p className="text-sm font-black text-slate-900 leading-tight">{user.name}</p>
                   <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest">{user.role}</p>
                 </div>
-                <img 
-                  src={user.avatar || `https://picsum.photos/seed/${user.name}/40/40`} 
-                  alt="Profile" 
+                <img
+                  src={user.avatar || `https://picsum.photos/seed/${user.name}/40/40`}
+                  alt="Profile"
                   className="w-10 h-10 rounded-xl border-2 border-white shadow-md"
                 />
                 <ChevronDown size={14} className={`text-slate-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />

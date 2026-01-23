@@ -61,6 +61,10 @@ export interface Customer {
   pricingHistory: PricingRecord[];
   lastModifiedBy?: string; // Audit field
   updatedAt?: string; // Audit field
+  // Market Map Filters
+  clientType?: 'Mechanical' | 'Electronics' | 'Other';
+  partRequirements?: string[];
+  industrialHub?: string;
 }
 
 export interface Expo {
@@ -89,6 +93,13 @@ export interface Visit {
   assignedTo: string;
   status: VisitStatus;
   notes?: string;
+  // New fields
+  location?: string;
+  expenseAmount?: number;
+  expenseNote?: string;
+  visitResult?: string;
+  nextFollowUpDate?: string;
+  reminderEnabled?: boolean;
 }
 
 export type UserRole = 'Admin' | 'Sales' | 'Marketing';
@@ -97,4 +108,42 @@ export interface User {
   name: string;
   role: UserRole;
   avatar?: string;
+}
+
+export type ProjectStatus = 'Active' | 'Completed' | 'On Hold';
+
+export interface Project {
+  id: string;
+  name: string;
+  description: string;
+  startDate: string;
+  endDate: string;
+  status: ProjectStatus;
+  createdBy: string;
+  companyName: string;
+  updatedAt?: string;
+}
+
+export interface Expense {
+  id: string;
+  projectId: string;
+  name: string;
+  amount: number;
+  category: 'Raw Material' | 'Machining/Production' | 'Labor' | 'Packaging & Transport' | 'Overheads' | 'Other';
+  date: string;
+  paidBy: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  notes?: string;
+  createdAt?: string;
+}
+
+export interface Income {
+  id: string;
+  projectId: string;
+  clientName: string;
+  amount: number;
+  invoiceNumber: string;
+  receivedDate: string;
+  status: 'Pending' | 'Received';
+  createdAt?: string;
 }

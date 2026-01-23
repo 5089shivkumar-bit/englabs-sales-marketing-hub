@@ -1,21 +1,25 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  Plus, 
-  Calendar, 
-  Search, 
-  Clock, 
-  CheckCircle2, 
-  XCircle, 
-  User as UserIcon, 
-  Building2, 
-  MapPin, 
-  ChevronRight, 
+import {
+  Plus,
+  Calendar,
+  Search,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  User as UserIcon,
+  Building2,
+  MapPin,
+  ChevronRight,
   X,
   Save,
   Trash2,
   Filter,
-  ArrowRight
+  ArrowRight,
+  DollarSign,
+  ClipboardCheck,
+  Bell,
+  FileText
 } from 'lucide-react';
 import { Customer, Visit, VisitStatus, User as AppUser } from '../types';
 import { dateUtils } from '../services/dateUtils';
@@ -33,13 +37,21 @@ export const VisitPlanView: React.FC<VisitPlanViewProps> = ({ customers, visits,
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
 
+  const [activeTab, setActiveTab] = useState('general');
+
   // Form State
   const [newVisit, setNewVisit] = useState({
     customerId: '',
     date: dateUtils.getISTIsoDate(),
     purpose: '',
     assignedTo: '',
-    notes: ''
+    notes: '',
+    location: '',
+    expenseAmount: '',
+    expenseNote: '',
+    visitResult: '',
+    nextFollowUpDate: '',
+    reminderEnabled: false
   });
 
   // Pre-fill personnel when opening the modal
@@ -55,9 +67,9 @@ export const VisitPlanView: React.FC<VisitPlanViewProps> = ({ customers, visits,
 
   const filteredVisits = useMemo(() => {
     return visits.filter(v => {
-      const matchesSearch = v.customerName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                           v.purpose.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           v.assignedTo.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = v.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.purpose.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.assignedTo.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'All' || v.status === statusFilter;
       return matchesSearch && matchesStatus;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -86,12 +98,31 @@ export const VisitPlanView: React.FC<VisitPlanViewProps> = ({ customers, visits,
       purpose: newVisit.purpose,
       assignedTo: newVisit.assignedTo,
       status: VisitStatus.PLANNED,
-      notes: newVisit.notes
+      notes: newVisit.notes,
+      location: newVisit.location,
+      expenseAmount: newVisit.expenseAmount ? parseFloat(newVisit.expenseAmount) : undefined,
+      expenseNote: newVisit.expenseNote,
+      visitResult: newVisit.visitResult,
+      nextFollowUpDate: newVisit.nextFollowUpDate,
+      reminderEnabled: newVisit.reminderEnabled
     };
 
     setVisits(prev => [visit, ...prev]);
     setShowAddModal(false);
-    setNewVisit({ customerId: '', date: dateUtils.getISTIsoDate(), purpose: '', assignedTo: '', notes: '' });
+    setNewVisit({
+      customerId: '',
+      date: dateUtils.getISTIsoDate(),
+      purpose: '',
+      assignedTo: '',
+      notes: '',
+      location: '',
+      expenseAmount: '',
+      expenseNote: '',
+      visitResult: '',
+      nextFollowUpDate: '',
+      reminderEnabled: false
+    });
+    setActiveTab('general');
   };
 
   const updateVisitStatus = (id: string, status: VisitStatus) => {
@@ -125,7 +156,7 @@ export const VisitPlanView: React.FC<VisitPlanViewProps> = ({ customers, visits,
           <h2 className="text-3xl font-black text-slate-900 tracking-tight">Visit Management</h2>
           <p className="text-slate-500 text-lg">Logged in as: <span className="text-blue-600 font-black">{currentUser.name}</span></p>
         </div>
-        <button 
+        <button
           onClick={() => setShowAddModal(true)}
           className="flex items-center px-8 py-4 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 text-sm font-black shadow-xl shadow-blue-500/20 transition-all active:scale-95"
         >
@@ -149,9 +180,9 @@ export const VisitPlanView: React.FC<VisitPlanViewProps> = ({ customers, visits,
             <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="relative flex-1 max-w-md">
                 <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="Search visits..." 
+                <input
+                  type="text"
+                  placeholder="Search visits..."
                   className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -159,7 +190,7 @@ export const VisitPlanView: React.FC<VisitPlanViewProps> = ({ customers, visits,
               </div>
               <div className="flex items-center space-x-2">
                 <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest mr-2">Filter Status:</span>
-                <select 
+                <select
                   className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 outline-none"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as any)}
@@ -185,8 +216,8 @@ export const VisitPlanView: React.FC<VisitPlanViewProps> = ({ customers, visits,
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredVisits.map(visit => (
-                    <tr 
-                      key={visit.id} 
+                    <tr
+                      key={visit.id}
                       onClick={() => setSelectedVisit(visit)}
                       className={`hover:bg-slate-50/80 cursor-pointer transition-colors group ${selectedVisit?.id === visit.id ? 'bg-blue-50/50' : ''}`}
                     >
@@ -279,30 +310,77 @@ export const VisitPlanView: React.FC<VisitPlanViewProps> = ({ customers, visits,
                   </div>
                 </div>
 
+                {/* Additional Details Grid */}
+                {(selectedVisit.location || selectedVisit.expenseAmount || selectedVisit.visitResult || selectedVisit.nextFollowUpDate) && (
+                  <div className="grid grid-cols-2 gap-4">
+                    {selectedVisit.location && (
+                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <MapPin size={14} className="text-blue-500" />
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location</span>
+                        </div>
+                        <p className="text-xs font-bold text-slate-700">{selectedVisit.location}</p>
+                      </div>
+                    )}
+                    {selectedVisit.expenseAmount !== undefined && (
+                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <DollarSign size={14} className="text-emerald-500" />
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Expense</span>
+                        </div>
+                        <p className="text-xs font-bold text-slate-700">₹{selectedVisit.expenseAmount.toLocaleString()}</p>
+                      </div>
+                    )}
+                    {selectedVisit.visitResult && (
+                      <div className="col-span-2 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <ClipboardCheck size={14} className="text-indigo-500" />
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Outcome / Result</span>
+                        </div>
+                        <p className="text-xs font-bold text-slate-700">{selectedVisit.visitResult}</p>
+                      </div>
+                    )}
+                    {selectedVisit.nextFollowUpDate && (
+                      <div className="col-span-2 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <Bell size={14} className="text-amber-500" />
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Next Follow-Up</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-bold text-slate-700">{selectedVisit.nextFollowUpDate}</p>
+                          {selectedVisit.reminderEnabled && (
+                            <span className="text-[9px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-bold uppercase">Reminder Active</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-4">
                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Update Visit Status</h4>
                   <div className="grid grid-cols-2 gap-3">
-                    <StatusButton 
-                      label="Mark Completed" 
-                      onClick={() => updateVisitStatus(selectedVisit.id, VisitStatus.COMPLETED)} 
+                    <StatusButton
+                      label="Mark Completed"
+                      onClick={() => updateVisitStatus(selectedVisit.id, VisitStatus.COMPLETED)}
                       active={selectedVisit.status === VisitStatus.COMPLETED}
                       color="emerald"
                     />
-                    <StatusButton 
-                      label="Reschedule" 
-                      onClick={() => updateVisitStatus(selectedVisit.id, VisitStatus.RESCHEDULED)} 
+                    <StatusButton
+                      label="Reschedule"
+                      onClick={() => updateVisitStatus(selectedVisit.id, VisitStatus.RESCHEDULED)}
                       active={selectedVisit.status === VisitStatus.RESCHEDULED}
                       color="blue"
                     />
-                    <StatusButton 
-                      label="Cancel Visit" 
-                      onClick={() => updateVisitStatus(selectedVisit.id, VisitStatus.CANCELLED)} 
+                    <StatusButton
+                      label="Cancel Visit"
+                      onClick={() => updateVisitStatus(selectedVisit.id, VisitStatus.CANCELLED)}
                       active={selectedVisit.status === VisitStatus.CANCELLED}
                       color="rose"
                     />
-                    <StatusButton 
-                      label="Set Planned" 
-                      onClick={() => updateVisitStatus(selectedVisit.id, VisitStatus.PLANNED)} 
+                    <StatusButton
+                      label="Set Planned"
+                      onClick={() => updateVisitStatus(selectedVisit.id, VisitStatus.PLANNED)}
                       active={selectedVisit.status === VisitStatus.PLANNED}
                       color="amber"
                     />
@@ -343,72 +421,212 @@ export const VisitPlanView: React.FC<VisitPlanViewProps> = ({ customers, visits,
                 </button>
               </div>
 
-              <div className="p-8 space-y-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Client Selection*</label>
-                  <select 
-                    required 
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
-                    value={newVisit.customerId}
-                    onChange={e => setNewVisit({...newVisit, customerId: e.target.value})}
+              {/* Tabs Integration */}
+              <div className="flex items-center px-8 border-b border-slate-100 overflow-x-auto hide-scrollbar">
+                {/* Tab Buttons Helper */}
+                {[
+                  { id: 'general', icon: Calendar, label: 'General Info' },
+                  { id: 'location', icon: MapPin, label: 'Location' },
+                  { id: 'expense', icon: DollarSign, label: 'Expenses' },
+                  { id: 'result', icon: ClipboardCheck, label: 'Result & Outcome' },
+                  { id: 'followup', icon: Bell, label: 'Next Follow-up' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center space-x-2 px-6 py-4 border-b-2 text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-colors ${activeTab === tab.id
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-200'
+                      }`}
                   >
-                    <option value="">-- Choose Customer --</option>
-                    {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Visit Date*</label>
-                    <input 
-                      required 
-                      type="date" 
-                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none"
-                      value={newVisit.date}
-                      onChange={e => setNewVisit({...newVisit, date: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Assigned Personnel</label>
-                    <input 
-                      type="text" 
-                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none bg-blue-50/30 border-blue-100"
-                      placeholder="e.g. Salil Anand"
-                      value={newVisit.assignedTo}
-                      onChange={e => setNewVisit({...newVisit, assignedTo: e.target.value})}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Primary Strategy/Purpose*</label>
-                  <input 
-                    required 
-                    type="text" 
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
-                    placeholder="e.g. Semi-annual contract review"
-                    value={newVisit.purpose}
-                    onChange={e => setNewVisit({...newVisit, purpose: e.target.value})}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Context & Discussion Notes</label>
-                  <textarea 
-                    rows={4}
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none resize-none"
-                    placeholder="Provide additional details for the marketing session..."
-                    value={newVisit.notes}
-                    onChange={e => setNewVisit({...newVisit, notes: e.target.value})}
-                  />
-                </div>
+                    <tab.icon size={16} />
+                    <span>{tab.label}</span>
+                  </button>
+                ))}
               </div>
 
-              <div className="p-8 bg-slate-50 flex items-center justify-end space-x-6 border-t border-slate-100">
-                <button type="button" onClick={() => setShowAddModal(false)} className="text-sm font-black text-slate-400 uppercase tracking-widest hover:text-slate-900">Discard</button>
-                <button type="submit" className="px-12 py-5 bg-blue-600 text-white rounded-2xl font-black text-sm shadow-2xl shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center active:scale-95">
-                  <Save size={18} className="mr-3" /> Commit Visit Record
-                </button>
+              <div className="p-8 space-y-6 max-h-[60vh] overflow-y-auto custom-scrollbar min-h-[400px]">
+
+                {/* General Tab */}
+                {activeTab === 'general' && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Client Selection*</label>
+                      <select
+                        required
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                        value={newVisit.customerId}
+                        onChange={e => setNewVisit({ ...newVisit, customerId: e.target.value })}
+                      >
+                        <option value="">-- Choose Customer --</option>
+                        {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Visit Date*</label>
+                        <input
+                          required
+                          type="date"
+                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none"
+                          value={newVisit.date}
+                          onChange={e => setNewVisit({ ...newVisit, date: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Assigned Personnel</label>
+                        <input
+                          type="text"
+                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none bg-blue-50/30 border-blue-100"
+                          placeholder="e.g. Salil Anand"
+                          value={newVisit.assignedTo}
+                          onChange={e => setNewVisit({ ...newVisit, assignedTo: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Primary Strategy/Purpose*</label>
+                      <input
+                        required
+                        type="text"
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                        placeholder="e.g. Semi-annual contract review"
+                        value={newVisit.purpose}
+                        onChange={e => setNewVisit({ ...newVisit, purpose: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Location Tab */}
+                {activeTab === 'location' && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Visit Location</label>
+                      <div className="relative">
+                        <MapPin size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          className="w-full pl-11 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                          placeholder="e.g. Client HQ, Factory Site, or Coffee Shop"
+                          value={newVisit.location}
+                          onChange={e => setNewVisit({ ...newVisit, location: e.target.value })}
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-400 pl-1">Leave blank if executed at client registered address.</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Expense Tab */}
+                {activeTab === 'expense' && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Expense Amount (INR)</label>
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-black">₹</span>
+                          <input
+                            type="number"
+                            className="w-full pl-10 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                            placeholder="0.00"
+                            value={newVisit.expenseAmount}
+                            onChange={e => setNewVisit({ ...newVisit, expenseAmount: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Expense Details / Justification</label>
+                      <textarea
+                        rows={3}
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none resize-none"
+                        placeholder="Lunch, Travel tickets, etc..."
+                        value={newVisit.expenseNote}
+                        onChange={e => setNewVisit({ ...newVisit, expenseNote: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Result Tab */}
+                {activeTab === 'result' && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Visit Outcome / Key Result</label>
+                      <input
+                        type="text"
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 bg-emerald-50/10"
+                        placeholder="e.g. Order Confirmed, Demo Scheduled, etc."
+                        value={newVisit.visitResult}
+                        onChange={e => setNewVisit({ ...newVisit, visitResult: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Detailed Discussion Notes</label>
+                      <textarea
+                        rows={6}
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none resize-none"
+                        placeholder="Provide full details of the meeting..."
+                        value={newVisit.notes}
+                        onChange={e => setNewVisit({ ...newVisit, notes: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Follow-up Tab */}
+                {activeTab === 'followup' && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Next Follow-Up Date</label>
+                        <input
+                          type="date"
+                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none"
+                          value={newVisit.nextFollowUpDate}
+                          onChange={e => setNewVisit({ ...newVisit, nextFollowUpDate: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-3 p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                      <input
+                        type="checkbox"
+                        id="reminderCheck"
+                        className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                        checked={newVisit.reminderEnabled}
+                        onChange={e => setNewVisit({ ...newVisit, reminderEnabled: e.target.checked })}
+                      />
+                      <label htmlFor="reminderCheck" className="text-sm font-bold text-amber-900 cursor-pointer select-none">
+                        Enable Reminder Notification
+                      </label>
+                    </div>
+                    <p className="text-xs text-slate-400 italic">
+                      * The system will alert you 24 hours before the follow-up date.
+                    </p>
+                  </div>
+                )}
+
+              </div>
+
+              <div className="p-8 bg-slate-50 flex items-center justify-between border-t border-slate-100">
+                <div className="flex space-x-2">
+                  {/* Step Navigation Dots for visual flair */}
+                  {['general', 'location', 'expense', 'result', 'followup'].map((step, idx) => (
+                    <div key={step} className={`w-2 h-2 rounded-full transition-colors ${activeTab === step ? 'bg-blue-600' : 'bg-slate-200'}`} />
+                  ))}
+                </div>
+
+                <div className="flex items-center space-x-4">
+                  <button type="button" onClick={() => setShowAddModal(false)} className="text-sm font-black text-slate-400 uppercase tracking-widest hover:text-slate-900">Discard</button>
+                  <button type="submit" className="px-12 py-5 bg-blue-600 text-white rounded-2xl font-black text-sm shadow-2xl shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center active:scale-95">
+                    <Save size={18} className="mr-3" /> Commit Visit Record
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -461,7 +679,7 @@ const StatusButton: React.FC<{ label: string; onClick: () => void; active: boole
   }[color];
 
   return (
-    <button 
+    <button
       onClick={onClick}
       className={`px-4 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${active ? activeStyles : `bg-white border-slate-200 text-slate-400 ${hoverStyles}`}`}
     >
