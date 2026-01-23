@@ -4,6 +4,42 @@ import { TechCategory, Customer, Expo, User } from './types';
 
 export const TECH_LIST = Object.values(TechCategory);
 
+export const DISCOVERY_KEYWORDS = [
+  "Mechanical Workshop",
+  "Fabrication Unit",
+  "CNC Machine Shop",
+  "Manufacturing Company",
+  "Industrial Supplier",
+  "Tool and Die makers",
+  "Injection Molding"
+];
+
+export const INDUSTRIAL_HUBS: Record<string, Record<string, Record<string, [number, number]>>> = {
+  'Punjab': {
+    'Mohali': {
+      'Phase-8': [30.7061, 76.6975],
+      'Phase-7': [30.7107, 76.7115],
+      'Phase-9': [30.6865, 76.7214]
+    }
+  },
+  'Haryana': {
+    'Gurugram': {
+      'Manesar': [28.3515, 76.9427],
+      'Udyog Vihar': [28.5024, 77.0818]
+    }
+  },
+  'Gujarat': {
+    'Ahmedabad': {
+      'Sanand GIDC': [22.9863, 72.3785],
+      'Naroda IE': [23.0768, 72.6586]
+    },
+    'Rajkot': {
+      'Aji Vasahat': [22.2858, 70.8242],
+      'Metoda GIDC': [22.2570, 70.6830]
+    }
+  }
+};
+
 /**
  * System Administrators
  */
@@ -61,7 +97,7 @@ export const MARKETING_TEAM = [
 /**
  * Master Registry: Indian States, UTs, Zones, and a comprehensive list of over 500 major cities.
  */
-export const INDIA_GEO_DATA: Record<string, { zone: string; cities: string[]; coords: [number, number]; hubs?: Record<string, string[]> }> = {
+export const INDIA_GEO_DATA: Record<string, { zone: string; cities: string[]; coords: [number, number] }> = {
   'Andaman and Nicobar Islands': {
     zone: 'South',
     cities: ['Port Blair', 'Garacharma', 'Bambooflat'],
@@ -115,24 +151,12 @@ export const INDIA_GEO_DATA: Record<string, { zone: string; cities: string[]; co
   'Gujarat': {
     zone: 'West',
     cities: ['Ahmedabad', 'Surat', 'Vadodara', 'Rajkot', 'Bhavnagar', 'Jamnagar', 'Junagadh', 'Gandhinagar', 'Nadiad', 'Anand', 'Morbi', 'Mehsana', 'Surendranagar', 'Bharuch', 'Vapi', 'Navsari', 'Veraval', 'Porbandar', 'Godhra', 'Bhuj', 'Ankleshwar', 'Botad', 'Patan', 'Palanpur', 'Jetpur', 'Valsad', 'Kalol', 'Gondal', 'Amreli', 'Deesa', 'Mundra', 'Kadi', 'Visnagar', 'Himmatnagar'],
-    coords: [22.2587, 71.1924],
-    hubs: {
-      'Ahmedabad': ['Vatva GIDC', 'Naroda GIDC', 'Odhav', 'Sanand', 'Kathwada'],
-      'Rajkot': ['Metoda GIDC', 'Shapar-Veraval', 'Aji Vasahat', 'Atkot'],
-      'Vadodara': ['Makarpura GIDC', 'Savli GIDC'],
-      'Surat': ['Sachin GIDC', 'Pandesara GIDC']
-    }
+    coords: [22.2587, 71.1924]
   },
   'Haryana': {
     zone: 'North',
     cities: ['Gurugram', 'Faridabad', 'Panipat', 'Ambala', 'Yamunanagar', 'Rohtak', 'Hisar', 'Karnal', 'Sonipat', 'Panchkula', 'Sirsa', 'Bhiwani', 'Bahadurgarh', 'Jind', 'Thanesar', 'Kaithal', 'Rewari', 'Palwal', 'Hansi', 'Narnaul', 'Fatehabad', 'Gohana', 'Mandi Dabwali', 'Charkhi Dadri', 'Shahbad', 'Pehowa', 'Ladwa'],
-    coords: [29.0588, 76.0856],
-    hubs: {
-      'Gurugram': ['Manesar (IMT)', 'Udyog Vihar', 'Sector 18', 'Info City'],
-      'Faridabad': ['NIT Industrial Area', 'Sector 25', 'Sector 24'],
-      'Panipat': ['Sector 29', 'Industrial Area'],
-      'Sonipat': ['Kundli', 'Rai', 'Barhi']
-    }
+    coords: [29.0588, 76.0856]
   },
   'Himachal Pradesh': {
     zone: 'North',
@@ -212,12 +236,7 @@ export const INDIA_GEO_DATA: Record<string, { zone: string; cities: string[]; co
   'Punjab': {
     zone: 'North',
     cities: ['Ludhiana', 'Amritsar', 'Jalandhar', 'Patiala', 'Bathinda', 'Mohali', 'Hoshiarpur', 'Batala', 'Pathankot', 'Moga', 'Abohar', 'Malerkotla', 'Khanna', 'Phagwara', 'Muktsar', 'Barnala', 'Rajpura', 'Firozpur', 'Kapurthala', 'Sunam', 'Sangrur', 'Fazilka', 'Gurdaspur', 'Nabha', 'Tarn Taran', 'Zirakpur', 'Mans'],
-    coords: [31.1471, 75.3412],
-    hubs: {
-      'Mohali': ['Phase-8 Industrial Area', 'Phase-7', 'JLPL Industrial Park'],
-      'Ludhiana': ['Focal Point', 'Industrial Area A', 'Industrial Area B', 'Sahnewal'],
-      'Jalandhar': ['Focal Point', 'Leather Complex']
-    }
+    coords: [31.1471, 75.3412]
   },
   'Rajasthan': {
     zone: 'West',
@@ -278,10 +297,7 @@ export const MOCK_CUSTOMERS: Customer[] = [
       { id: 'p1', customerId: '1', tech: TechCategory.SLS_PA2200, rate: 75, unit: 'gram', date: '2024-01-15' }
     ],
     lastModifiedBy: 'Salil Anand',
-    updatedAt: '2024-03-20 10:30 AM',
-    clientType: 'Mechanical',
-    partRequirements: ['CNC', '3D Printing'],
-    industrialHub: 'Aerospace Park'
+    updatedAt: '2024-03-20 10:30 AM'
   },
   {
     id: '2',
@@ -299,10 +315,7 @@ export const MOCK_CUSTOMERS: Customer[] = [
       { id: 'p3', customerId: '2', tech: TechCategory.MJF_PA12, rate: 65, unit: 'gram', date: '2024-03-01' }
     ],
     lastModifiedBy: 'Mr. Bharat',
-    updatedAt: '2024-03-21 02:15 PM',
-    clientType: 'Mechanical',
-    partRequirements: ['Injection Molding', 'MJF'],
-    industrialHub: 'Bhosari MIDC'
+    updatedAt: '2024-03-21 02:15 PM'
   }
 ];
 

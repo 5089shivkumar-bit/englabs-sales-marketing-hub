@@ -61,10 +61,6 @@ export interface Customer {
   pricingHistory: PricingRecord[];
   lastModifiedBy?: string; // Audit field
   updatedAt?: string; // Audit field
-  // Market Map Filters
-  clientType?: 'Mechanical' | 'Electronics' | 'Other';
-  partRequirements?: string[];
-  industrialHub?: string;
 }
 
 export interface Expo {
