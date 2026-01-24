@@ -50,6 +50,8 @@ export const ProjectDetailsView: React.FC = () => {
         vendorDetails?: VendorDetails;
         commercialDetails?: {
             totalCost: number;
+            clientBillingAmount: number;
+            marginPercent: number;
             rateType: 'Per Piece' | 'Job Work' | 'Hourly';
             advancePaid: number;
             balanceAmount: number;
@@ -74,13 +76,17 @@ export const ProjectDetailsView: React.FC = () => {
             vendorMobile: '',
             vendorCity: '',
             vendorState: '',
-            totalCost: 0,
+            vendorCost: 0,
+            clientBillingAmount: 0,
+            marginPercent: 0,
             timelineWeeks: 0,
             trackingLink: '',
             milestones: ''
         },
         commercialDetails: {
             totalCost: 0,
+            clientBillingAmount: 0,
+            marginPercent: 0,
             rateType: 'Per Piece',
             advancePaid: 0,
             balanceAmount: 0,
@@ -138,13 +144,17 @@ export const ProjectDetailsView: React.FC = () => {
                 vendorMobile: '',
                 vendorCity: '',
                 vendorState: '',
-                totalCost: 0,
+                vendorCost: 0,
+                clientBillingAmount: 0,
+                marginPercent: 0,
                 timelineWeeks: 0,
                 trackingLink: '',
                 milestones: ''
             },
             commercialDetails: {
                 totalCost: 0,
+                clientBillingAmount: 0,
+                marginPercent: 0,
                 rateType: 'Per Piece',
                 advancePaid: 0,
                 balanceAmount: 0,
@@ -175,13 +185,17 @@ export const ProjectDetailsView: React.FC = () => {
                 vendorMobile: '',
                 vendorCity: '',
                 vendorState: '',
-                totalCost: 0,
+                vendorCost: 0,
+                clientBillingAmount: 0,
+                marginPercent: 0,
                 timelineWeeks: 0,
                 trackingLink: '',
                 milestones: ''
             },
             commercialDetails: project.commercialDetails || {
                 totalCost: 0,
+                clientBillingAmount: 0,
+                marginPercent: 0,
                 rateType: 'Per Piece',
                 advancePaid: 0,
                 balanceAmount: 0,
@@ -802,6 +816,21 @@ export const ProjectDetailsView: React.FC = () => {
                                             <span>{project.createdBy}</span>
                                         </div>
                                     </div>
+
+                                    {project.type === ProjectType.VENDOR && (
+                                        <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-slate-50">
+                                            <div className="bg-slate-50 p-2 rounded-xl">
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Billing</p>
+                                                <p className="text-xs font-black text-slate-900">₹{project.vendorDetails?.clientBillingAmount || 0}</p>
+                                            </div>
+                                            <div className="bg-slate-50 p-2 rounded-xl">
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Margin</p>
+                                                <p className={`text-xs font-black ${project.vendorDetails?.marginPercent && project.vendorDetails.marginPercent > 0 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                                                    {project.vendorDetails?.marginPercent || 0}%
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -816,6 +845,7 @@ export const ProjectDetailsView: React.FC = () => {
                                 <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Client</th>
                                 <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Dates</th>
                                 <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Type</th>
+                                <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Financials</th>
                                 <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
                                 <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Owner</th>
                                 <th className="px-6 py-5 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">Actions</th>
@@ -855,6 +885,18 @@ export const ProjectDetailsView: React.FC = () => {
                                         <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${project.type === ProjectType.VENDOR ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
                                             {project.type || ProjectType.IN_HOUSE}
                                         </span>
+                                    </td>
+                                    <td className="px-6 py-5">
+                                        {project.type === ProjectType.VENDOR ? (
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] font-bold text-slate-900 leading-none mb-1">₹{project.vendorDetails?.clientBillingAmount || 0}</span>
+                                                <span className={`text-[9px] font-black ${project.vendorDetails?.marginPercent && project.vendorDetails.marginPercent > 0 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                                                    {project.vendorDetails?.marginPercent || 0}% Margin
+                                                </span>
+                                            </div>
+                                        ) : (
+                                            <span className="text-xs text-slate-300 font-bold">N/A</span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-5">
                                         <StatusBadge status={project.status} />
@@ -1090,19 +1132,59 @@ export const ProjectDetailsView: React.FC = () => {
                                                                 </div>
                                                             </div>
 
-                                                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5 mt-4">
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-white/5 mt-4">
                                                                 <div>
-                                                                    <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Total Cost (INR)</label>
+                                                                    <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Vendor Cost (Total INR)</label>
                                                                     <input
                                                                         type="number"
                                                                         className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-white/10"
-                                                                        placeholder="Amount"
-                                                                        value={form.vendorDetails?.totalCost || ''}
-                                                                        onChange={e => setForm({
-                                                                            ...form,
-                                                                            vendorDetails: { ...form.vendorDetails!, totalCost: parseFloat(e.target.value) || 0 }
-                                                                        })}
+                                                                        placeholder="Vendor Cost"
+                                                                        value={form.vendorDetails?.vendorCost || ''}
+                                                                        onChange={e => {
+                                                                            const cost = parseFloat(e.target.value) || 0;
+                                                                            const billing = form.vendorDetails?.clientBillingAmount || 0;
+                                                                            const margin = billing > 0 ? ((billing - cost) / billing) * 100 : 0;
+                                                                            setForm({
+                                                                                ...form,
+                                                                                vendorDetails: {
+                                                                                    ...form.vendorDetails!,
+                                                                                    vendorCost: cost,
+                                                                                    marginPercent: parseFloat(margin.toFixed(2))
+                                                                                }
+                                                                            });
+                                                                        }}
                                                                     />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">Client Billing Amount</label>
+                                                                    <input
+                                                                        type="number"
+                                                                        className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 transition-all placeholder:text-white/10"
+                                                                        placeholder="Billing Amount"
+                                                                        value={form.vendorDetails?.clientBillingAmount || ''}
+                                                                        onChange={e => {
+                                                                            const billing = parseFloat(e.target.value) || 0;
+                                                                            const cost = form.vendorDetails?.vendorCost || 0;
+                                                                            const margin = billing > 0 ? ((billing - cost) / billing) * 100 : 0;
+                                                                            setForm({
+                                                                                ...form,
+                                                                                vendorDetails: {
+                                                                                    ...form.vendorDetails!,
+                                                                                    clientBillingAmount: billing,
+                                                                                    marginPercent: parseFloat(margin.toFixed(2))
+                                                                                }
+                                                                            });
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="grid grid-cols-2 gap-4 mt-4">
+                                                                <div className="p-3 bg-white/5 rounded-xl border border-white/5">
+                                                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Margin % (Auto)</label>
+                                                                    <div className={`text-lg font-black ${form.vendorDetails?.marginPercent && form.vendorDetails.marginPercent > 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                                                        {form.vendorDetails?.marginPercent || 0}%
+                                                                    </div>
                                                                 </div>
                                                                 <div>
                                                                     <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Timeline (Weeks)</label>
@@ -1230,7 +1312,7 @@ export const ProjectDetailsView: React.FC = () => {
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                                     <div className="space-y-6">
                                                         <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Project / Job Cost (INR)</label>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vendor Cost (INR)</label>
                                                             <input
                                                                 type="number"
                                                                 required
@@ -1238,13 +1320,39 @@ export const ProjectDetailsView: React.FC = () => {
                                                                 placeholder="0.00"
                                                                 value={form.commercialDetails?.totalCost || ''}
                                                                 onChange={e => {
-                                                                    const val = parseFloat(e.target.value) || 0;
+                                                                    const cost = parseFloat(e.target.value) || 0;
+                                                                    const billing = form.commercialDetails?.clientBillingAmount || 0;
+                                                                    const margin = billing > 0 ? ((billing - cost) / billing) * 100 : 0;
                                                                     setForm({
                                                                         ...form,
                                                                         commercialDetails: {
                                                                             ...form.commercialDetails!,
-                                                                            totalCost: val,
-                                                                            balanceAmount: val - (form.commercialDetails?.advancePaid || 0)
+                                                                            totalCost: cost,
+                                                                            marginPercent: parseFloat(margin.toFixed(2))
+                                                                        }
+                                                                    });
+                                                                }}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">Client Billing Amount (INR)</label>
+                                                            <input
+                                                                type="number"
+                                                                required
+                                                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-lg font-black text-white focus:outline-none focus:border-emerald-500 transition-all placeholder:text-white/10"
+                                                                placeholder="0.00"
+                                                                value={form.commercialDetails?.clientBillingAmount || ''}
+                                                                onChange={e => {
+                                                                    const billing = parseFloat(e.target.value) || 0;
+                                                                    const cost = form.commercialDetails?.totalCost || 0;
+                                                                    const margin = billing > 0 ? ((billing - cost) / billing) * 100 : 0;
+                                                                    setForm({
+                                                                        ...form,
+                                                                        commercialDetails: {
+                                                                            ...form.commercialDetails!,
+                                                                            clientBillingAmount: billing,
+                                                                            balanceAmount: billing - (form.commercialDetails?.advancePaid || 0),
+                                                                            marginPercent: parseFloat(margin.toFixed(2))
                                                                         }
                                                                     });
                                                                 }}
@@ -1283,16 +1391,24 @@ export const ProjectDetailsView: React.FC = () => {
                                                                         commercialDetails: {
                                                                             ...form.commercialDetails!,
                                                                             advancePaid: val,
-                                                                            balanceAmount: (form.commercialDetails?.totalCost || 0) - val
+                                                                            balanceAmount: (form.commercialDetails?.clientBillingAmount || 0) - val
                                                                         }
                                                                     });
                                                                 }}
                                                             />
                                                         </div>
-                                                        <div className="p-5 bg-white/5 border border-white/5 rounded-2xl">
-                                                            <label className="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-1">Auto-Calculated Balance</label>
-                                                            <div className="text-2xl font-black text-white">
-                                                                Rs. {(form.commercialDetails?.balanceAmount || 0).toLocaleString()}
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div className="p-5 bg-white/5 border border-white/5 rounded-2xl">
+                                                                <label className="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-1">Margin % (Auto)</label>
+                                                                <div className={`text-2xl font-black ${form.commercialDetails?.marginPercent && form.commercialDetails.marginPercent > 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                                                    {form.commercialDetails?.marginPercent || 0}%
+                                                                </div>
+                                                            </div>
+                                                            <div className="p-5 bg-white/5 border border-white/5 rounded-2xl">
+                                                                <label className="block text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Calculated Balance</label>
+                                                                <div className="text-2xl font-black text-white">
+                                                                    Rs. {(form.commercialDetails?.balanceAmount || 0).toLocaleString()}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>
