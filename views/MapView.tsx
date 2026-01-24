@@ -4,7 +4,7 @@ import {
   MapPin, Users, Briefcase, ChevronRight, X, Search,
   Navigation, Filter, Target, Zap, Building2, Ruler, Bell, Calendar
 } from 'lucide-react';
-import { Customer, Visit } from '../types';
+import { Customer, Visit, VisitStatus } from '../types';
 import { INDIA_GEO_DATA, DISCOVERY_KEYWORDS, INDUSTRIAL_HUBS } from '../constants';
 import { api } from '../services/api';
 
@@ -33,6 +33,7 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedZone, setSelectedZone] = useState('All Zones');
   const [selectedState, setSelectedState] = useState('All States');
   const [selectedCity, setSelectedCity] = useState('All Cities');
   const [selectedHub, setSelectedHub] = useState('All Hubs');
@@ -52,7 +53,14 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
   const RADII = ['10km', '25km', '50km', 'Global'];
 
   // Geographic context for filters
-  const availableStates = ['All States', ...Object.keys(INDIA_GEO_DATA).sort()];
+  const ZONES = ['All Zones', 'North', 'South', 'West', 'East', 'Central'];
+
+  const availableStates = useMemo(() => {
+    const states = Object.keys(INDIA_GEO_DATA);
+    if (selectedZone === 'All Zones') return ['All States', ...states.sort()];
+    return ['All States', ...states.filter(s => INDIA_GEO_DATA[s].zone === selectedZone).sort()];
+  }, [selectedZone]);
+
   const availableCities = selectedState !== 'All States'
     ? ['All Cities', ...INDIA_GEO_DATA[selectedState].cities.sort()]
     : ['All Cities'];
@@ -95,6 +103,8 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
           industryType: 'Mechanical',
           machineTypes: ['CNC', 'VMC'],
           companySize: 'Medium',
+          annualTurnover: 50000000,
+          projectTurnover: 15000000,
           isDiscovered: true,
           coords: [currentCenter[0] + 0.02, currentCenter[1] + 0.02],
           contacts: [],
@@ -112,6 +122,8 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
           industryType: 'Automotive',
           machineTypes: ['Lathe', 'CNC'],
           companySize: 'Large',
+          annualTurnover: 150000000,
+          projectTurnover: 40000000,
           isDiscovered: true,
           coords: [28.3515 + 0.01, 76.9427 - 0.01],
           contacts: [],
@@ -125,6 +137,12 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
 
     return list.filter(c => {
       const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase());
+
+      // Derive zone if missing (backwards compatibility or auto-assignment)
+      const customerStateData = INDIA_GEO_DATA[c.state];
+      const customerZone = c.zone || customerStateData?.zone;
+
+      const matchesZone = selectedZone === 'All Zones' || customerZone === selectedZone;
       const matchesState = selectedState === 'All States' || c.state === selectedState;
       const matchesCity = selectedCity === 'All Cities' || c.city === selectedCity;
 
@@ -139,9 +157,9 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
         matchesRadius = dist <= radiusVal;
       }
 
-      return matchesSearch && matchesState && matchesCity && matchesIndustry && matchesMachine && matchesSize && matchesRadius;
+      return matchesSearch && matchesZone && matchesState && matchesCity && matchesIndustry && matchesMachine && matchesSize && matchesRadius;
     });
-  }, [customers, searchTerm, selectedState, selectedCity, filterIndustry, filterMachine, filterSize, filterRadius, discoveryMode, currentCenter]);
+  }, [customers, searchTerm, selectedZone, selectedState, selectedCity, filterIndustry, filterMachine, filterSize, filterRadius, discoveryMode, currentCenter]);
 
   // Alert Trigger Logic
   useEffect(() => {
@@ -170,7 +188,7 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
           customerName: p.name,
           date: new Date().toISOString().split('T')[0],
           purpose: 'Initial Discovery Meeting (Auto-Generated)',
-          status: 'Planned',
+          status: VisitStatus.PLANNED,
           assignedTo: 'ME-Marketing',
           location: `${p.city}, ${p.state}`,
           reminderEnabled: true
@@ -390,6 +408,21 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
           </div>
         </div>
         <div className="bg-white border border-slate-200 p-2 rounded-2xl flex flex-col shadow-sm">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter mb-1 px-1">Zone</label>
+          <select
+            value={selectedZone}
+            onChange={(e) => {
+              setSelectedZone(e.target.value);
+              setSelectedState('All States');
+              setSelectedCity('All Cities');
+              setSelectedHub('All Hubs');
+            }}
+            className="text-xs font-bold text-slate-700 outline-none bg-transparent"
+          >
+            {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+          </select>
+        </div>
+        <div className="bg-white border border-slate-200 p-2 rounded-2xl flex flex-col shadow-sm">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter mb-1 px-1">State</label>
           <select
             value={selectedState}
@@ -397,14 +430,20 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
               setSelectedState(e.target.value);
               setSelectedCity('All Cities');
               setSelectedHub('All Hubs');
+
+              // Auto-sync Zone if a specific state is chosen
+              if (e.target.value !== 'All States') {
+                const stateZone = INDIA_GEO_DATA[e.target.value]?.zone;
+                if (stateZone) setSelectedZone(stateZone);
+              }
             }}
             className="text-xs font-bold text-slate-700 outline-none bg-transparent"
           >
             {availableStates.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
-        <div className="bg-white border border-slate-200 p-2 rounded-2xl flex flex-col shadow-sm lg:col-span-2">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter mb-1 px-1">City / Industrial Hub</label>
+        <div className="bg-white border border-slate-200 p-2 rounded-2xl flex flex-col shadow-sm lg:col-span-1">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter mb-1 px-1">City / Hub</label>
           <div className="flex items-center gap-1">
             <select
               value={selectedCity}

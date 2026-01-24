@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
-import { Customer, Expo, Visit, TechCategory, PricingRecord, ContactPerson, Project } from '../types';
+import { Customer, Expo, Visit, TechCategory, PricingRecord, ContactPerson, Project, Vendor, VendorType, ProjectType } from '../types';
+import { INDIA_GEO_DATA } from '../constants';
 
 // --- CUSTOMERS ---
 
@@ -8,52 +9,50 @@ export const api = {
         async fetchAll(): Promise<Customer[]> {
             const { data, error } = await supabase
                 .from('customers')
-                .select(`
-          *,
-          contacts (*),
-          pricing_history (*)
-        `);
+                .select('*, contacts(*), pricing_history(*)');
 
             if (error) throw error;
 
-            // Map Supabase response to Customer type
-            // Note: Supabase returns snake_case, but types are camelCase. 
-            // Ideally we should map them.
-            return data?.map((c: any) => ({
-                id: c.id,
-                name: c.name,
-                city: c.city,
-                state: c.state,
-                country: c.country,
-                annualTurnover: c.annual_turnover,
-                projectTurnover: c.project_turnover,
-                industry: c.industry,
-                lastModifiedBy: c.last_modified_by,
-                updatedAt: c.updated_at,
-                contacts: c.contacts || [], // contacts are joined
-                pricingHistory: c.pricing_history?.map((p: any) => ({
+            return (data || []).map(row => ({
+                id: row.id,
+                name: row.name,
+                city: row.city,
+                state: row.state,
+                country: row.country,
+                zone: (row.zone || INDIA_GEO_DATA[row.state]?.zone) as any,
+                annualTurnover: row.annual_turnover,
+                projectTurnover: row.project_turnover,
+                industry: row.industry,
+                industryType: row.industry_type,
+                machineTypes: row.machine_types,
+                companySize: row.company_size,
+                coords: row.coords,
+                isDiscovered: row.is_discovered,
+                contacts: (row.contacts || []).map((c: any) => ({
+                    id: c.id,
+                    name: c.name,
+                    designation: c.designation,
+                    email: c.email,
+                    phone: c.phone
+                })),
+                pricingHistory: (row.pricing_history || []).map((p: any) => ({
                     id: p.id,
                     customerId: p.customer_id,
                     tech: p.tech as TechCategory,
                     rate: p.rate,
                     unit: p.unit,
                     date: p.date
-                })) || []
-            })) || [];
+                })),
+                lastModifiedBy: row.last_modified_by,
+                updatedAt: row.updated_at
+            }));
         },
 
         async create(customer: Customer): Promise<Customer> {
-            // 1. Insert Customer
-            const { data: custData, error: custError } = await supabase
+            const zone = INDIA_GEO_DATA[customer.state]?.zone || customer.zone;
+            const { data, error } = await supabase
                 .from('customers')
                 .insert({
-                    // We can let Supabase generate ID if we didn't provide one, but types say string. 
-                    // If we provide UUID, fine. If 'c-...' string, it might fail if ID is GUID type.
-                    // The schema uses UUID. The frontend uses 'c-' + timestamp.
-                    // REFACTOR: We should let Supabase generate UUIDs or change schema to TEXT.
-                    // For now, I'll assume we let Supabase generate UUID and we update the frontend object.
-                    // BUT, if I change ID, I break relations.
-                    // Let's omit ID and let Supabase generate it, then return it.
                     name: customer.name,
                     city: customer.city,
                     state: customer.state,
@@ -61,40 +60,35 @@ export const api = {
                     annual_turnover: customer.annualTurnover,
                     project_turnover: customer.projectTurnover,
                     industry: customer.industry,
+                    industry_type: customer.industryType,
+                    machine_types: customer.machineTypes,
+                    company_size: customer.companySize,
+                    coords: customer.coords,
                     last_modified_by: customer.lastModifiedBy,
-                    updated_at: customer.updatedAt
+                    updated_at: new Date().toISOString()
                 })
                 .select()
                 .single();
 
-            if (custError) throw custError;
+            if (error) throw error;
+            const newId = data.id;
 
-            // 2. Insert Contacts
             if (customer.contacts && customer.contacts.length > 0) {
                 const contactsToInsert = customer.contacts.map(c => ({
-                    customer_id: custData.id,
+                    customer_id: newId,
                     name: c.name,
                     designation: c.designation,
                     email: c.email,
                     phone: c.phone
                 }));
-
-                const { error: contactError } = await supabase
-                    .from('contacts')
-                    .insert(contactsToInsert);
-
-                if (contactError) console.error("Error saving contacts", contactError);
+                await supabase.from('contacts').insert(contactsToInsert);
             }
 
-            // Return the complete object (or fetch it again)
-            return {
-                ...customer,
-                id: custData.id
-            };
+            return { ...customer, id: newId, zone: zone as any };
         },
 
         async update(customer: Customer): Promise<void> {
-            // Update basic fields
+            const zone = INDIA_GEO_DATA[customer.state]?.zone || customer.zone;
             const { error } = await supabase
                 .from('customers')
                 .update({
@@ -105,6 +99,10 @@ export const api = {
                     annual_turnover: customer.annualTurnover,
                     project_turnover: customer.projectTurnover,
                     industry: customer.industry,
+                    industry_type: customer.industryType,
+                    machine_types: customer.machineTypes,
+                    company_size: customer.companySize,
+                    coords: customer.coords,
                     last_modified_by: customer.lastModifiedBy,
                     updated_at: new Date().toISOString()
                 })
@@ -112,10 +110,6 @@ export const api = {
 
             if (error) throw error;
 
-            // Update contacts is tricky (merge/delete). 
-            // For simplicity, maybe delete all and re-insert? Or just upsert?
-            // Let's try upsert if they have IDs, but frontend generates 'cp-...' IDs.
-            // Simplest for this prototype: Delete all for this customer and re-insert.
             await supabase.from('contacts').delete().eq('customer_id', customer.id);
 
             if (customer.contacts && customer.contacts.length > 0) {
@@ -176,7 +170,9 @@ export const api = {
                 purpose: v.purpose,
                 assignedTo: v.assigned_to,
                 status: v.status,
-                notes: v.notes
+                notes: v.notes,
+                location: v.location,
+                reminderEnabled: v.reminder_enabled
             })) || [];
         },
         async create(visit: Visit): Promise<Visit> {
@@ -187,7 +183,9 @@ export const api = {
                 purpose: visit.purpose,
                 assigned_to: visit.assignedTo,
                 status: visit.status,
-                notes: visit.notes
+                notes: visit.notes,
+                location: visit.location,
+                reminder_enabled: visit.reminderEnabled
             }).select().single();
 
             if (error) throw error;
@@ -201,7 +199,9 @@ export const api = {
                 purpose: visit.purpose,
                 assigned_to: visit.assignedTo,
                 status: visit.status,
-                notes: visit.notes
+                notes: visit.notes,
+                location: visit.location,
+                reminder_enabled: visit.reminderEnabled
             }).eq('id', visit.id);
         },
         async delete(id: string): Promise<void> {
@@ -212,23 +212,16 @@ export const api = {
     projects: {
         async fetchAll(): Promise<Project[]> {
             try {
-                // Try fetching with soft-delete filter
                 const { data, error } = await supabase
                     .from('projects')
                     .select('*')
-                    .or('is_deleted.is.null,is_deleted.eq.false')
                     .order('updated_at', { ascending: false });
 
-                if (error) {
-                    // specific code for undefined column
-                    if (error.code === '42703') {
-                        console.warn('Soft delete column missing, falling back to all projects');
-                        return this.fetchAllFallback();
-                    }
-                    throw error;
-                }
+                if (error) throw error;
 
-                return data?.map((p: any) => ({
+                const activeProjects = (data || []).filter((p: any) => p.is_deleted !== true);
+
+                return activeProjects.map((p: any) => ({
                     id: p.id,
                     name: p.name,
                     description: p.description,
@@ -237,37 +230,17 @@ export const api = {
                     status: p.status,
                     createdBy: p.created_by,
                     companyName: p.company_name,
+                    type: p.project_type || ProjectType.IN_HOUSE,
+                    vendorDetails: p.vendor_details,
+                    commercialDetails: p.commercial_details,
                     updatedAt: p.updated_at
-                })) || [];
+                }));
             } catch (err: any) {
-                if (err.code === '42703') {
-                    return this.fetchAllFallback();
-                }
-                throw err;
+                console.error('Fetch Projects failed:', err);
+                return [];
             }
         },
-        async fetchAllFallback(): Promise<Project[]> {
-            const { data, error } = await supabase
-                .from('projects')
-                .select('*')
-                .order('updated_at', { ascending: false });
-
-            if (error) throw error;
-            return data?.map((p: any) => ({
-                id: p.id,
-                name: p.name,
-                description: p.description,
-                startDate: p.start_date,
-                endDate: p.end_date,
-                status: p.status,
-                createdBy: p.created_by,
-                companyName: p.company_name,
-                updatedAt: p.updated_at
-            })) || [];
-        },
         async create(project: Project): Promise<Project> {
-            // Check if column exists by trying to insert with it
-            // Actually, safe to just try insert. If it fails, retry without is_deleted
             try {
                 const { data, error } = await supabase.from('projects').insert({
                     name: project.name,
@@ -277,14 +250,16 @@ export const api = {
                     status: project.status,
                     created_by: project.createdBy,
                     company_name: project.companyName,
-                    updated_at: new Date().toISOString(),
-                    is_deleted: false
+                    project_type: project.type,
+                    vendor_details: project.vendorDetails,
+                    commercial_details: project.commercialDetails,
+                    updated_at: new Date().toISOString()
                 }).select().single();
 
                 if (error) {
+                    // Fallback for missing columns (project_type or commercial_details)
                     if (error.code === '42703') {
-                        // Fallback create without is_deleted
-                        const { data: data2, error: error2 } = await supabase.from('projects').insert({
+                        const { data: fallbackData, error: fallbackError } = await supabase.from('projects').insert({
                             name: project.name,
                             description: project.description,
                             start_date: project.startDate,
@@ -294,48 +269,73 @@ export const api = {
                             company_name: project.companyName,
                             updated_at: new Date().toISOString()
                         }).select().single();
-                        if (error2) throw error2;
-                        return { ...project, id: data2.id };
+
+                        if (fallbackError) throw fallbackError;
+                        return { ...project, id: fallbackData.id };
                     }
                     throw error;
                 }
                 return { ...project, id: data.id };
             } catch (err: any) {
+                console.error('Create Project failed:', err);
                 throw err;
             }
         },
         async update(project: Project): Promise<void> {
-            const { error } = await supabase.from('projects').update({
-                name: project.name,
-                description: project.description,
-                start_date: project.startDate,
-                end_date: project.endDate,
-                status: project.status,
-                created_by: project.createdBy,
-                company_name: project.companyName,
-                updated_at: new Date().toISOString()
-            }).eq('id', project.id);
-            if (error) throw error;
+            try {
+                const { error } = await supabase.from('projects').update({
+                    name: project.name,
+                    description: project.description,
+                    start_date: project.startDate,
+                    end_date: project.endDate,
+                    status: project.status,
+                    created_by: project.createdBy,
+                    company_name: project.companyName,
+                    project_type: project.type,
+                    vendor_details: project.vendorDetails,
+                    commercial_details: project.commercialDetails,
+                    updated_at: new Date().toISOString()
+                }).eq('id', project.id);
+
+                if (error) {
+                    if (error.code === '42703') {
+                        const { error: fallbackError } = await supabase.from('projects').update({
+                            name: project.name,
+                            description: project.description,
+                            start_date: project.startDate,
+                            end_date: project.endDate,
+                            status: project.status,
+                            created_by: project.createdBy,
+                            company_name: project.companyName,
+                            updated_at: new Date().toISOString()
+                        }).eq('id', project.id);
+                        if (fallbackError) throw fallbackError;
+                        return;
+                    }
+                    throw error;
+                }
+            } catch (err: any) {
+                console.error('Update Project failed:', err);
+                throw err;
+            }
         },
         async delete(id: string): Promise<void> {
-            // Try soft delete
-            const { error } = await supabase
-                .from('projects')
-                .update({ is_deleted: true })
-                .eq('id', id);
-
-            if (error && error.code === '42703') {
-                // Fallback to hard delete if column missing
-                console.warn('Soft delete column missing, performing hard delete');
-                const { error: hardError } = await supabase.from('projects').delete().eq('id', id);
-                if (hardError) throw hardError;
-            } else if (error) {
-                throw error;
+            try {
+                // Try soft delete first
+                const { error } = await supabase.from('projects').update({ is_deleted: true }).eq('id', id);
+                if (error) {
+                    // Fallback to hard delete
+                    const { error: hardError } = await supabase.from('projects').delete().eq('id', id);
+                    if (hardError) throw hardError;
+                }
+            } catch (err: any) {
+                console.error('Delete Project failed:', err);
+                throw err;
             }
         }
     },
     expenses: {
-        async fetchByProject(projectId: string): Promise<Expense[]> {
+        async fetchByProject(projectId: string): Promise<any[]> {
             const { data, error } = await supabase
                 .from('project_expenses')
                 .select('*')
@@ -356,7 +356,7 @@ export const api = {
                 createdAt: e.created_at
             })) || [];
         },
-        async create(expense: Omit<Expense, 'id'>): Promise<Expense> {
+        async create(expense: any): Promise<any> {
             const { data, error } = await supabase.from('project_expenses').insert({
                 project_id: expense.projectId,
                 name: expense.name,
@@ -377,7 +377,7 @@ export const api = {
         }
     },
     income: {
-        async fetchByProject(projectId: string): Promise<Income[]> {
+        async fetchByProject(projectId: string): Promise<any[]> {
             const { data, error } = await supabase
                 .from('project_incomes')
                 .select('*')
@@ -396,7 +396,7 @@ export const api = {
                 createdAt: i.created_at
             })) || [];
         },
-        async create(income: Omit<Income, 'id'>): Promise<Income> {
+        async create(income: any): Promise<any> {
             const { data, error } = await supabase.from('project_incomes').insert({
                 project_id: income.projectId,
                 client_name: income.clientName,
@@ -412,6 +412,56 @@ export const api = {
         async delete(id: string): Promise<void> {
             const { error } = await supabase.from('project_incomes').delete().eq('id', id);
             if (error) throw error;
+        }
+    },
+    vendors: {
+        async fetchAll(): Promise<Vendor[]> {
+            try {
+                const { data, error } = await supabase
+                    .from('vendors')
+                    .select('*')
+                    .order('name', { ascending: true });
+
+                if (error) {
+                    if (error.code === '42P01') return []; // Table doesn't exist yet
+                    throw error;
+                }
+                return data?.map((v: any) => ({
+                    id: v.id,
+                    name: v.name,
+                    type: v.type,
+                    contactPerson: v.contact_person,
+                    mobile: v.mobile,
+                    city: v.city,
+                    state: v.state,
+                    createdAt: v.created_at
+                })) || [];
+            } catch (err: any) {
+                if (err.code === '42P01') return [];
+                throw err;
+            }
+        },
+        async create(vendor: Partial<Vendor>): Promise<Vendor> {
+            const { data, error } = await supabase.from('vendors').insert({
+                name: vendor.name,
+                type: vendor.type,
+                contact_person: vendor.contactPerson,
+                mobile: vendor.mobile,
+                city: vendor.city,
+                state: vendor.state
+            }).select().single();
+
+            if (error) throw error;
+            return {
+                id: data.id,
+                name: data.name,
+                type: data.type,
+                contactPerson: data.contact_person,
+                mobile: data.mobile,
+                city: data.city,
+                state: data.state,
+                createdAt: data.created_at
+            };
         }
     }
 };

@@ -21,14 +21,16 @@ import {
   Clock,
   Fingerprint,
   RefreshCw,
-  PencilLine
+  PencilLine,
+  Download
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { Customer, User } from '../types';
 import { ExcelImporter } from '../components/ExcelImporter';
-import { INDIA_GEO_DATA } from '../constants';
+import { INDIA_GEO_DATA, ZONES } from '../constants';
 import { dateUtils } from '../services/dateUtils';
-
-const ZONES = ['All Zones', 'North', 'South', 'East', 'West', 'Central'];
 
 interface CustomersViewProps {
   customers: Customer[];
@@ -130,20 +132,39 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
     e.preventDefault();
     setEditingCustomer(customer);
     setFormCust({
-      name: customer.name,
-      city: customer.city,
-      state: customer.state,
+      name: customer.name || '',
+      city: customer.city || '',
+      state: customer.state || '',
       industry: customer.industry || '',
-      annualTurnover: customer.annualTurnover.toString(),
+      annualTurnover: (customer.annualTurnover || 0).toString(),
       contactName: customer.contacts[0]?.name || '',
       contactEmail: customer.contacts[0]?.email || ''
     });
     setShowAddModal(true);
   };
 
+  const inferStateFromCity = (city: string) => {
+    for (const stateName in INDIA_GEO_DATA) {
+      if (INDIA_GEO_DATA[stateName].cities.some(c => c.toLowerCase() === city.toLowerCase())) {
+        return stateName;
+      }
+    }
+    return '';
+  };
+
   const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formCust.name || !formCust.city) return;
+    if (!formCust.name) return;
+
+    // Automation Logic: If state is missing but city is present, infer it.
+    let finalState = formCust.state;
+    if (!finalState && formCust.city) {
+      finalState = inferStateFromCity(formCust.city);
+    }
+
+    // If city is missing but state is present, we might just use the principal city or leave generic.
+    // Requirement says "User only enters City or State".
+    const finalCity = formCust.city || 'Principal City';
 
     const timestamp = dateUtils.getISTTimestamp();
     let customerToSave: Customer;
@@ -152,8 +173,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
       customerToSave = {
         ...editingCustomer,
         name: formCust.name,
-        city: formCust.city,
-        state: formCust.state || 'N/A',
+        city: finalCity,
+        state: finalState || 'N/A',
         industry: formCust.industry,
         annualTurnover: parseFloat(formCust.annualTurnover) || 0,
         lastModifiedBy: currentUser.name,
@@ -172,16 +193,14 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
       if (onSaveCustomer) {
         await onSaveCustomer(customerToSave, false);
       } else {
-        // Fallback for local update if prop missing
         setCustomers(prev => prev.map(c => c.id === customerToSave.id ? customerToSave : c));
       }
-
     } else {
       customerToSave = {
-        id: `c-${Date.now()}`, // Temporary ID
+        id: `c-${Date.now()}`,
         name: formCust.name,
-        city: formCust.city,
-        state: formCust.state || 'N/A',
+        city: finalCity,
+        state: finalState || 'N/A',
         country: 'India',
         annualTurnover: parseFloat(formCust.annualTurnover) || 0,
         projectTurnover: 0,
@@ -210,7 +229,58 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
     setFormCust({ name: '', city: '', state: '', industry: '', annualTurnover: '', contactName: '', contactEmail: '' });
   };
 
+  const handleExportExcel = () => {
+    const dataToExport = filteredCustomers.map(c => ({
+      'Company Name': c.name,
+      'City': c.city,
+      'State': c.state,
+      'Zone': getZoneForCustomer(c),
+      'Industry': c.industry,
+      'Annual Turnover (Cr)': formatRevenue(c.annualTurnover),
+      'Last Modified By': c.lastModifiedBy || 'N/A',
+      'Last Updated': c.updatedAt || 'N/A'
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Customers');
+    XLSX.writeFile(workbook, `Customers_Export_${selectedZone.replace(' ', '_')}.xlsx`);
+  };
+
+  const handleExportPDF = () => {
+    const doc = new jsPDF() as any;
+
+    doc.setFontSize(20);
+    doc.text('National Client Directory', 14, 22);
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Region: ${selectedZone} | Total Records: ${filteredCustomers.length}`, 14, 30);
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 36);
+
+    const tableData = filteredCustomers.map(c => [
+      c.name,
+      c.city,
+      c.state,
+      getZoneForCustomer(c),
+      c.industry,
+      formatRevenue(c.annualTurnover)
+    ]);
+
+    autoTable(doc, {
+      startY: 45,
+      head: [['Identity', 'City', 'State', 'Zone', 'Vertical', 'Rev (Cr)']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [51, 65, 85], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      styles: { fontSize: 8, cellPadding: 3 }
+    });
+
+    doc.save(`Customers_Export_${selectedZone.replace(' ', '_')}.pdf`);
+  };
+
   const getZoneForCustomer = (customer: Customer) => {
+    if (customer.zone) return customer.zone;
     if (customer.state && INDIA_GEO_DATA[customer.state]) {
       return INDIA_GEO_DATA[customer.state].zone;
     }
@@ -219,7 +289,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
         return INDIA_GEO_DATA[stateName].zone;
       }
     }
-    return 'Others';
+    return 'Other';
   };
 
   const filteredCustomers = customers.filter(c => {
@@ -287,30 +357,50 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
       {/* Filters Overlay */}
       <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm space-y-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-          <div className="flex items-center space-x-2 overflow-x-auto pb-2 lg:pb-0 no-scrollbar">
-            {ZONES.map(zone => (
-              <button
-                key={zone}
-                onClick={() => setSelectedZone(zone)}
-                className={`px-5 py-2.5 rounded-xl text-xs font-black whitespace-nowrap transition-all uppercase tracking-tight border ${selectedZone === zone
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-lg'
-                  : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
-                  }`}
-              >
-                {zone}
-              </button>
-            ))}
+          <div className="flex items-center bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner overflow-x-auto no-scrollbar">
+            {ZONES.map(zone => {
+              const count = customers.filter(c => getZoneForCustomer(c) === zone || (zone === 'All Zones')).length;
+              return (
+                <button
+                  key={zone}
+                  onClick={() => setSelectedZone(zone)}
+                  className={`px-6 py-3 rounded-xl text-xs font-black whitespace-nowrap transition-all uppercase tracking-widest flex items-center space-x-2 ${selectedZone === zone
+                    ? 'bg-white text-blue-600 shadow-xl shadow-blue-500/10 ring-1 ring-slate-200'
+                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                    }`}
+                >
+                  <span>{zone}</span>
+                  {count > 0 && <span className={`px-2 py-0.5 rounded-lg text-[9px] ${selectedZone === zone ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'}`}>{count}</span>}
+                </button>
+              );
+            })}
           </div>
 
-          <div className="relative flex-1 max-w-lg">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input
-              type="text"
-              placeholder="Search by company, city, state..."
-              className="w-full pl-12 pr-6 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="relative flex-1 max-w-lg flex items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input
+                type="text"
+                placeholder="Search by company, city, state..."
+                className="w-full pl-12 pr-6 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <button
+              onClick={handleExportExcel}
+              className="p-3 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm flex items-center gap-2 font-black text-[10px] uppercase"
+              title="Export to Excel"
+            >
+              <Download size={16} /> XL
+            </button>
+            <button
+              onClick={handleExportPDF}
+              className="p-3 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl hover:bg-rose-600 hover:text-white transition-all shadow-sm flex items-center gap-2 font-black text-[10px] uppercase"
+              title="Export to PDF"
+            >
+              <Download size={16} /> PDF
+            </button>
           </div>
         </div>
       </div>
@@ -487,12 +577,33 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                     <input type="text" value={formCust.industry} onChange={e => setFormCust({ ...formCust, industry: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="e.g. Automotive" />
                   </div>
                   <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">City Hub*</label>
-                    <input required type="text" value={formCust.city} onChange={e => setFormCust({ ...formCust, city: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="Bengaluru" />
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">City Hub</label>
+                    <input
+                      type="text"
+                      value={formCust.city}
+                      onChange={e => {
+                        const val = e.target.value;
+                        const inferredState = inferStateFromCity(val);
+                        setFormCust(prev => ({
+                          ...prev,
+                          city: val,
+                          state: inferredState || prev.state
+                        }));
+                      }}
+                      className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all font-mono"
+                      placeholder="e.g. Ludhiana"
+                    />
                   </div>
                   <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">State</label>
-                    <input type="text" value={formCust.state} onChange={e => setFormCust({ ...formCust, state: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="Karnataka" />
+                    <input
+                      type="text"
+                      value={formCust.state}
+                      onChange={e => setFormCust({ ...formCust, state: e.target.value })}
+                      className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
+                      placeholder="e.g. Punjab"
+                    />
+                    {formCust.city && !formCust.state && <p className="text-[9px] text-amber-600 font-bold uppercase mt-1 px-2">State will be auto-assigned</p>}
                   </div>
                   <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Annual Revenue (INR)</label>

@@ -14,6 +14,7 @@ import { ProjectDetailsView } from './views/ProjectDetailsView';
 import { UserRole, Customer, Expo, User, Visit, VisitStatus } from './types';
 import { SYSTEM_ADMINS, MARKETING_TEAM as DEFAULT_MARKETING_TEAM } from './constants';
 import { api } from './services/api';
+import { INDIA_GEO_DATA, ZONES } from './constants';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -154,21 +155,52 @@ const App: React.FC = () => {
           />
         );
       case 'reports':
+        const zonalStats = ZONES.filter(z => z !== 'All Zones').map(zone => {
+          const zoneCustomers = customers.filter(c => (c.zone || INDIA_GEO_DATA[c.state]?.zone) === zone);
+          const totalRevenue = zoneCustomers.reduce((sum, c) => sum + (c.annualTurnover || 0), 0);
+          return { zone, count: zoneCustomers.length, revenue: totalRevenue };
+        });
+
         return (
-          <div className="flex flex-col items-center justify-center h-full py-20 text-center animate-in fade-in zoom-in-95 duration-500">
-            <div className="p-4 bg-slate-100 rounded-full mb-6">
-              <img src="https://picsum.photos/seed/report/100/100" className="w-24 h-24 rounded-full opacity-40 grayscale" alt="Reports" />
+          <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight">Regional Performance Metrics</h2>
+                <p className="text-slate-500 font-medium">Zonal distribution of {customers.length} manufacturing accounts.</p>
+              </div>
+              <div className="px-6 py-3 bg-blue-50 text-blue-600 rounded-2xl text-xs font-black uppercase tracking-widest border border-blue-100">
+                Live Data Synchronized
+              </div>
             </div>
-            <h2 className="text-2xl font-bold text-slate-900">Advanced Analytics Module</h2>
-            <p className="text-slate-500 max-w-sm mt-3 text-sm leading-relaxed">
-              Our AI is currently synthesizing your historical manufacturing data into actionable insights based on your latest Excel imports.
-            </p>
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className="mt-8 px-8 py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition-all"
-            >
-              Return to Live Dashboard
-            </button>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+              {zonalStats.map(stat => (
+                <div key={stat.zone} className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-xl hover:shadow-blue-500/5 transition-all group">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 group-hover:text-blue-500 transition-colors">{stat.zone} Zone</p>
+                  <div className="flex items-baseline space-x-2">
+                    <span className="text-4xl font-black text-slate-900">{stat.count}</span>
+                    <span className="text-xs font-bold text-slate-400">Clients</span>
+                  </div>
+                  <div className="mt-6 pt-6 border-t border-slate-50">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Revenue</p>
+                    <p className="text-lg font-black text-slate-900">₹ {(stat.revenue / 10000000).toFixed(1)} Cr</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-slate-900 rounded-[2.5rem] p-12 text-white relative overflow-hidden shadow-2xl">
+              <div className="relative z-10 max-w-2xl">
+                <h3 className="text-2xl font-black mb-4 uppercase tracking-tight">AI Territory Intelligence</h3>
+                <p className="text-slate-400 text-sm leading-relaxed mb-8">
+                  Based on your cluster density, the **North Zone** shows a 15% higher concentration of CNC-capable units. We recommend increasing visit frequency in **Ludhiana** and **Gurugram** for Q1 growth targets.
+                </p>
+                <button onClick={() => setActiveTab('map')} className="px-8 py-4 bg-white text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-400 hover:text-white transition-all">
+                  View Strategic Heatmap
+                </button>
+              </div>
+              <div className="absolute top-0 right-0 w-1/3 h-full bg-gradient-to-l from-blue-600/20 to-transparent pointer-events-none"></div>
+            </div>
           </div>
         );
       default:

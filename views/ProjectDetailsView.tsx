@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ClipboardList, Archive, FileText, CheckCircle2, User as UserIcon, Building2, Calendar, Clock, X, Plus, LayoutGrid, List as ListIcon, MoreHorizontal, Trash2, Save, Search, FileDown, FileUp, Download, Upload } from 'lucide-react';
-import { Project, ProjectStatus, User, Expense, Income } from '../types';
+import { Project, ProjectStatus, ProjectType, User, Expense, Income, VendorDetails, Vendor, VendorType } from '../types';
 import { api } from '../services/api';
 import { dataService } from '../services/dataService';
 
@@ -12,6 +12,9 @@ export const ProjectDetailsView: React.FC = () => {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [editingProject, setEditingProject] = useState<Project | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [vendors, setVendors] = useState<Vendor[]>([]);
+    const [loadingVendors, setLoadingVendors] = useState(false);
+    const [activeProjectType, setActiveProjectType] = useState<ProjectType>(ProjectType.IN_HOUSE);
 
     // Stats (calculated from ALL projects, not filtered)
     const stats = {
@@ -24,12 +27,14 @@ export const ProjectDetailsView: React.FC = () => {
     // Filter Logic
     const filteredProjects = projects.filter(project => {
         const query = searchQuery.toLowerCase();
-        return (
+        const matchesType = (project.type || ProjectType.IN_HOUSE) === activeProjectType;
+        const matchesSearch = (
             project.name.toLowerCase().includes(query) ||
             project.description?.toLowerCase().includes(query) ||
             project.status.toLowerCase().includes(query) ||
             project.companyName?.toLowerCase().includes(query)
         );
+        return matchesType && matchesSearch;
     });
 
     // Form State
@@ -40,20 +45,67 @@ export const ProjectDetailsView: React.FC = () => {
         endDate: string;
         status: ProjectStatus;
         createdBy: string;
+        type: ProjectType;
         companyName: string;
+        vendorDetails?: VendorDetails;
+        commercialDetails?: {
+            totalCost: number;
+            rateType: 'Per Piece' | 'Job Work' | 'Hourly';
+            advancePaid: number;
+            balanceAmount: number;
+            paymentTerms: 'Advance' | '30 Days' | '45 Days';
+            gstApplicable: 'Yes' | 'No';
+            gstNumber?: string;
+        };
     }>({
         name: '',
         description: '',
         startDate: '',
         endDate: '',
         status: 'Active',
-        createdBy: 'Admin', // Default
-        companyName: ''
+        createdBy: 'Admin',
+        type: ProjectType.IN_HOUSE,
+        companyName: '',
+        vendorDetails: {
+            vendorId: '',
+            vendorName: '',
+            vendorType: 'CNC',
+            vendorContact: '',
+            vendorMobile: '',
+            vendorCity: '',
+            vendorState: '',
+            totalCost: 0,
+            timelineWeeks: 0,
+            trackingLink: '',
+            milestones: ''
+        },
+        commercialDetails: {
+            totalCost: 0,
+            rateType: 'Per Piece',
+            advancePaid: 0,
+            balanceAmount: 0,
+            paymentTerms: 'Advance',
+            gstApplicable: 'No',
+            gstNumber: ''
+        }
     });
 
     useEffect(() => {
         loadProjects();
+        loadVendors();
     }, []);
+
+    const loadVendors = async () => {
+        setLoadingVendors(true);
+        try {
+            const data = await api.vendors.fetchAll();
+            setVendors(data);
+        } catch (error) {
+            console.error('Failed to load vendors', error);
+        } finally {
+            setLoadingVendors(false);
+        }
+    };
 
     const loadProjects = async () => {
         try {
@@ -76,7 +128,30 @@ export const ProjectDetailsView: React.FC = () => {
             endDate: '',
             status: 'Active',
             createdBy: 'Admin',
-            companyName: ''
+            type: activeProjectType,
+            companyName: '',
+            vendorDetails: {
+                vendorId: '',
+                vendorName: '',
+                vendorType: 'CNC',
+                vendorContact: '',
+                vendorMobile: '',
+                vendorCity: '',
+                vendorState: '',
+                totalCost: 0,
+                timelineWeeks: 0,
+                trackingLink: '',
+                milestones: ''
+            },
+            commercialDetails: {
+                totalCost: 0,
+                rateType: 'Per Piece',
+                advancePaid: 0,
+                balanceAmount: 0,
+                paymentTerms: 'Advance',
+                gstApplicable: 'No',
+                gstNumber: ''
+            }
         });
         setShowModal(true);
     };
@@ -90,14 +165,86 @@ export const ProjectDetailsView: React.FC = () => {
             endDate: project.endDate,
             status: project.status,
             createdBy: project.createdBy,
-            companyName: project.companyName
+            type: project.type || ProjectType.IN_HOUSE,
+            companyName: project.companyName,
+            vendorDetails: project.vendorDetails || {
+                vendorId: '',
+                vendorName: '',
+                vendorType: 'CNC',
+                vendorContact: '',
+                vendorMobile: '',
+                vendorCity: '',
+                vendorState: '',
+                totalCost: 0,
+                timelineWeeks: 0,
+                trackingLink: '',
+                milestones: ''
+            },
+            commercialDetails: project.commercialDetails || {
+                totalCost: 0,
+                rateType: 'Per Piece',
+                advancePaid: 0,
+                balanceAmount: 0,
+                paymentTerms: 'Advance',
+                gstApplicable: 'No',
+                gstNumber: ''
+            }
         });
         setShowModal(true);
+    };
+
+    const handleSelectVendor = (vendorId: string) => {
+        const vendor = vendors.find(v => v.id === vendorId);
+        if (vendor) {
+            setForm({
+                ...form,
+                vendorDetails: {
+                    ...form.vendorDetails!,
+                    vendorId: vendor.id,
+                    vendorName: vendor.name,
+                    vendorType: vendor.type,
+                    vendorContact: vendor.contactPerson,
+                    vendorMobile: vendor.mobile,
+                    vendorCity: vendor.city,
+                    vendorState: vendor.state
+                }
+            });
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            if (!form.name) throw new Error("Project Name is mandatory.");
+
+            let finalVendorDetails = form.vendorDetails;
+
+            if (form.type === ProjectType.VENDOR && form.vendorDetails) {
+                // Validation
+                if (!form.vendorDetails.vendorName) throw new Error("Vendor Name is mandatory.");
+                if (!form.vendorDetails.vendorType) throw new Error("Vendor Type is mandatory.");
+
+                // If it's a new vendor (no vendorId), create it in the master list first
+                if (!form.vendorDetails.vendorId) {
+                    const newMasterVendor = await api.vendors.create({
+                        name: form.vendorDetails.vendorName,
+                        type: form.vendorDetails.vendorType,
+                        contactPerson: form.vendorDetails.vendorContact,
+                        mobile: form.vendorDetails.vendorMobile,
+                        city: form.vendorDetails.vendorCity,
+                        state: form.vendorDetails.vendorState
+                    });
+
+                    finalVendorDetails = {
+                        ...form.vendorDetails,
+                        vendorId: newMasterVendor.id
+                    };
+
+                    // Refresh local vendor list
+                    loadVendors();
+                }
+            }
+
             if (editingProject) {
                 // Update
                 const updatedProject: Project = {
@@ -108,7 +255,10 @@ export const ProjectDetailsView: React.FC = () => {
                     endDate: form.endDate,
                     status: form.status,
                     createdBy: form.createdBy,
-                    companyName: form.companyName
+                    type: form.type,
+                    companyName: form.companyName,
+                    vendorDetails: form.type === ProjectType.VENDOR ? finalVendorDetails : undefined,
+                    commercialDetails: form.type === ProjectType.VENDOR ? form.commercialDetails : undefined
                 };
                 await api.projects.update(updatedProject);
                 setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
@@ -122,14 +272,20 @@ export const ProjectDetailsView: React.FC = () => {
                     endDate: form.endDate,
                     status: form.status,
                     createdBy: form.createdBy,
-                    companyName: form.companyName
+                    type: form.type,
+                    companyName: form.companyName,
+                    vendorDetails: form.type === ProjectType.VENDOR ? finalVendorDetails : undefined,
+                    commercialDetails: form.type === ProjectType.VENDOR ? form.commercialDetails : undefined
                 };
                 const saved = await api.projects.create(newProject);
                 setProjects(prev => [saved, ...prev]);
             }
             setShowModal(false);
         } catch (error: any) {
-            alert('Failed to save project: ' + error.message);
+            if (error.message.includes("Vendor Name") || error.message.includes("Vendor Type") || error.message.includes("Project Name")) {
+                setActiveTab('overview');
+            }
+            alert('Validation Error: ' + error.message);
         }
     };
 
@@ -160,7 +316,7 @@ export const ProjectDetailsView: React.FC = () => {
     );
 
     // Tab State
-    type Tab = 'overview' | 'expenses' | 'income' | 'profit_loss' | 'documents' | 'activity';
+    type Tab = 'overview' | 'commercial' | 'expenses' | 'income' | 'profit_loss' | 'documents' | 'activity';
     const [activeTab, setActiveTab] = useState<Tab>('overview');
 
     // Expense State
@@ -386,6 +542,70 @@ export const ProjectDetailsView: React.FC = () => {
         dataService.exportExcel(data, `Income_${editingProject?.name}`, 'Income');
     };
 
+    const handleExportProjectPDF = () => {
+        if (!editingProject) return;
+        const columns = ['Field', 'Details'];
+        const rows = [
+            ['Project Name', editingProject.name],
+            ['Description', editingProject.description || 'N/A'],
+            ['Start Date', editingProject.startDate || 'N/A'],
+            ['End Date', editingProject.endDate || 'N/A'],
+            ['Status', editingProject.status],
+            ['Created By', editingProject.createdBy],
+            ['Company/Client', editingProject.companyName || 'N/A'],
+        ];
+
+        if (editingProject.type === ProjectType.VENDOR && editingProject.vendorDetails) {
+            rows.push(['---', '---']);
+            rows.push(['[ Vendor Details ]', '']);
+            rows.push(['Vendor Name', editingProject.vendorDetails.vendorName]);
+            rows.push(['Vendor Contact', editingProject.vendorDetails.vendorContact]);
+            rows.push(['Timeline', `${editingProject.vendorDetails.timelineWeeks} Weeks`]);
+        }
+
+        if (editingProject.type === ProjectType.VENDOR && editingProject.commercialDetails) {
+            rows.push(['---', '---']);
+            rows.push(['[ Commercial Details ]', '']);
+            rows.push(['Project Cost', `Rs. ${editingProject.commercialDetails.totalCost}`]);
+            rows.push(['Rate Type', editingProject.commercialDetails.rateType]);
+            rows.push(['Advance Paid', `Rs. ${editingProject.commercialDetails.advancePaid}`]);
+            rows.push(['Balance Amount', `Rs. ${editingProject.commercialDetails.balanceAmount}`]);
+            rows.push(['Payment Terms', editingProject.commercialDetails.paymentTerms]);
+            rows.push(['GST Applicable', editingProject.commercialDetails.gstApplicable]);
+            if (editingProject.commercialDetails.gstApplicable === 'Yes') {
+                rows.push(['GST Number', editingProject.commercialDetails.gstNumber || 'N/A']);
+            }
+        }
+
+        dataService.exportPDF(`Project_Report_${editingProject.name}`, columns, rows);
+    };
+
+    const handleExportProjectExcel = () => {
+        if (!editingProject) return;
+        const data = {
+            'Project Name': editingProject.name,
+            'Description': editingProject.description,
+            'Start Date': editingProject.startDate,
+            'End Date': editingProject.endDate,
+            'Status': editingProject.status,
+            'Created By': editingProject.createdBy,
+            'Company/Client': editingProject.companyName,
+            ...(editingProject.type === ProjectType.VENDOR ? {
+                'Vendor Name': editingProject.vendorDetails?.vendorName,
+                'Vendor Contact': editingProject.vendorDetails?.vendorContact,
+                'Timeline (Weeks)': editingProject.vendorDetails?.timelineWeeks,
+                'Project Cost': editingProject.commercialDetails?.totalCost,
+                'Rate Type': editingProject.commercialDetails?.rateType,
+                'Advance Paid': editingProject.commercialDetails?.advancePaid,
+                'Balance Amount': editingProject.commercialDetails?.balanceAmount,
+                'Payment Terms': editingProject.commercialDetails?.paymentTerms,
+                'GST Applicable': editingProject.commercialDetails?.gstApplicable,
+                'GST Number': editingProject.commercialDetails?.gstNumber
+            } : {})
+        };
+        dataService.exportExcel([data], `Project_Report_${editingProject.name}`, 'Overview');
+    };
+
     const handleImportIncome = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files?.length || !editingProject) return;
         const file = e.target.files[0];
@@ -495,6 +715,30 @@ export const ProjectDetailsView: React.FC = () => {
                 ))}
             </div>
 
+            {/* Project Type Tabs */}
+            <div className="flex items-center space-x-2 p-1.5 bg-slate-100/50 rounded-2xl border border-slate-200 w-fit">
+                <button
+                    onClick={() => setActiveProjectType(ProjectType.IN_HOUSE)}
+                    className={`flex items-center space-x-3 px-8 py-3.5 rounded-xl text-sm font-black transition-all ${activeProjectType === ProjectType.IN_HOUSE
+                        ? 'bg-white text-blue-600 shadow-md ring-1 ring-slate-200'
+                        : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                >
+                    <LayoutGrid size={18} />
+                    <span>In-House Projects</span>
+                </button>
+                <button
+                    onClick={() => setActiveProjectType(ProjectType.VENDOR)}
+                    className={`flex items-center space-x-3 px-8 py-3.5 rounded-xl text-sm font-black transition-all ${activeProjectType === ProjectType.VENDOR
+                        ? 'bg-white text-indigo-600 shadow-md ring-1 ring-slate-200'
+                        : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                >
+                    <Building2 size={18} />
+                    <span>Vendor Projects</span>
+                </button>
+            </div>
+
             {/* Content Switcher */}
             {loading ? (
                 <div className="p-12 text-center text-slate-400">Loading projects...</div>
@@ -523,7 +767,12 @@ export const ProjectDetailsView: React.FC = () => {
                                     <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 shadow-sm">
                                         <ClipboardList size={28} />
                                     </div>
-                                    <StatusBadge status={project.status} />
+                                    <div className="flex flex-col items-end gap-2">
+                                        <StatusBadge status={project.status} />
+                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${project.type === ProjectType.VENDOR ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
+                                            {project.type || ProjectType.IN_HOUSE}
+                                        </span>
+                                    </div>
                                 </div>
 
                                 <h3 className="text-xl font-black text-slate-900 mb-2 truncate" title={project.name}>{project.name}</h3>
@@ -532,9 +781,16 @@ export const ProjectDetailsView: React.FC = () => {
                                 </p>
 
                                 <div className="space-y-3 pt-6 border-t border-slate-100">
-                                    <div className="flex items-center text-xs font-bold text-slate-400">
-                                        <Building2 size={14} className="mr-2 text-slate-300" />
-                                        <span className="uppercase tracking-wider truncate">{project.companyName || 'Unknown Company'}</span>
+                                    <div className="flex items-center justify-between text-xs font-bold text-slate-400">
+                                        <div className="flex items-center">
+                                            <Building2 size={14} className="mr-2 text-slate-300" />
+                                            <span className="uppercase tracking-wider truncate">{project.companyName || 'Unknown Company'}</span>
+                                        </div>
+                                        {project.type === ProjectType.VENDOR && project.vendorDetails?.vendorName && (
+                                            <span className="text-[9px] text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 truncate max-w-[120px]">
+                                                {project.vendorDetails.vendorName}
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center text-xs font-bold text-slate-400">
@@ -559,6 +815,7 @@ export const ProjectDetailsView: React.FC = () => {
                                 <th className="px-8 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Project Name</th>
                                 <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Client</th>
                                 <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Dates</th>
+                                <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Type</th>
                                 <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
                                 <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Owner</th>
                                 <th className="px-6 py-5 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">Actions</th>
@@ -588,11 +845,16 @@ export const ProjectDetailsView: React.FC = () => {
                                             {project.companyName || '-'}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-5">
-                                        <div className="flex flex-col text-xs font-medium text-slate-500">
-                                            <span className="flex items-center mb-1"><Calendar size={12} className="mr-1.5" /> Start: {project.startDate || 'N/A'}</span>
-                                            <span className="flex items-center"><Clock size={12} className="mr-1.5" /> End: {project.endDate || 'N/A'}</span>
+                                    <td className="px-6 py-5 text-xs font-medium text-slate-500">
+                                        <div className="flex flex-col mb-1 text-slate-700">
+                                            <span className="flex items-center mb-1"><Calendar size={12} className="mr-1.5 text-slate-300" /> Start: {project.startDate || 'N/A'}</span>
+                                            <span className="flex items-center"><Clock size={12} className="mr-1.5 text-slate-300" /> End: {project.endDate || 'N/A'}</span>
                                         </div>
+                                    </td>
+                                    <td className="px-6 py-5">
+                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${project.type === ProjectType.VENDOR ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
+                                            {project.type || ProjectType.IN_HOUSE}
+                                        </span>
                                     </td>
                                     <td className="px-6 py-5">
                                         <StatusBadge status={project.status} />
@@ -629,6 +891,7 @@ export const ProjectDetailsView: React.FC = () => {
 
                             <nav className="space-y-2 flex-1">
                                 <TabButton id="overview" label="Overview" icon={LayoutGrid} />
+                                {form.type === ProjectType.VENDOR && <TabButton id="commercial" label="Commercial Details" icon={Archive} />}
                                 <TabButton id="expenses" label="Expenses" icon={ClipboardList} />
                                 <TabButton id="income" label="Income" icon={CheckCircle2} />
                                 <TabButton id="profit_loss" label="Profit & Loss" icon={Archive} />
@@ -671,9 +934,27 @@ export const ProjectDetailsView: React.FC = () => {
                             <div className="flex-1 overflow-y-auto p-8 md:p-12">
                                 {activeTab === 'overview' && (
                                     <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                                        <div>
-                                            <h2 className="text-2xl font-black text-slate-900">Project Overview</h2>
-                                            <p className="text-slate-500">Manage core project details and status.</p>
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <h2 className="text-2xl font-black text-slate-900">Project Overview</h2>
+                                                <p className="text-slate-500">Manage core project details and status.</p>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <button
+                                                    onClick={handleExportProjectExcel}
+                                                    className="flex items-center px-4 py-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-100 text-xs font-black transition-all border border-green-100"
+                                                    title="Export to Excel"
+                                                >
+                                                    <Download size={14} className="mr-2" /> XL
+                                                </button>
+                                                <button
+                                                    onClick={handleExportProjectPDF}
+                                                    className="flex items-center px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 text-xs font-black transition-all border border-red-100"
+                                                    title="Export to PDF"
+                                                >
+                                                    <FileDown size={14} className="mr-2" /> PDF
+                                                </button>
+                                            </div>
                                         </div>
 
                                         <form onSubmit={handleSubmit} className="space-y-6">
@@ -688,6 +969,159 @@ export const ProjectDetailsView: React.FC = () => {
                                                     onChange={e => setForm({ ...form, name: e.target.value })}
                                                 />
                                             </div>
+
+                                            {form.type === ProjectType.VENDOR && (
+                                                <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white space-y-8 animate-in zoom-in-95 duration-300 border border-white/5 shadow-2xl">
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <h4 className="text-sm font-black uppercase tracking-[0.2em] text-blue-400 mb-1">Vendor Master Selection</h4>
+                                                            <p className="text-white/40 text-[10px] font-bold">Pick an existing vendor or enter details for a new one.</p>
+                                                        </div>
+                                                        <Building2 className="text-blue-500/20" size={32} />
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                        <div className="space-y-4">
+                                                            <div>
+                                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Select Vendor</label>
+                                                                <select
+                                                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
+                                                                    value={form.vendorDetails?.vendorId || ''}
+                                                                    onChange={e => handleSelectVendor(e.target.value)}
+                                                                >
+                                                                    <option value="" className="bg-slate-900 text-slate-400 font-bold">--- Select Master Vendor ---</option>
+                                                                    {vendors.map(v => (
+                                                                        <option key={v.id} value={v.id} className="bg-slate-900 text-white font-bold">{v.name} ({v.type})</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+
+                                                            <div>
+                                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vendor Name (Required)</label>
+                                                                <input
+                                                                    type="text"
+                                                                    required
+                                                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-white/10"
+                                                                    placeholder="e.g. Precision Components Ltd"
+                                                                    value={form.vendorDetails?.vendorName || ''}
+                                                                    onChange={e => setForm({
+                                                                        ...form,
+                                                                        vendorDetails: { ...form.vendorDetails!, vendorName: e.target.value }
+                                                                    })}
+                                                                />
+                                                            </div>
+
+                                                            <div>
+                                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vendor Type (Mandatory)</label>
+                                                                <select
+                                                                    required
+                                                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
+                                                                    value={form.vendorDetails?.vendorType || 'CNC'}
+                                                                    onChange={e => setForm({
+                                                                        ...form,
+                                                                        vendorDetails: { ...form.vendorDetails!, vendorType: e.target.value as VendorType }
+                                                                    })}
+                                                                >
+                                                                    <option value="CNC" className="bg-slate-900">CNC</option>
+                                                                    <option value="Fabrication" className="bg-slate-900">Fabrication</option>
+                                                                    <option value="Casting" className="bg-slate-900">Casting</option>
+                                                                    <option value="Painting" className="bg-slate-900">Painting</option>
+                                                                    <option value="Electrical" className="bg-slate-900">Electrical</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="space-y-4">
+                                                            <div className="grid grid-cols-2 gap-4">
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Contact Person</label>
+                                                                    <input
+                                                                        type="text"
+                                                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-white/10"
+                                                                        placeholder="Name"
+                                                                        value={form.vendorDetails?.vendorContact || ''}
+                                                                        onChange={e => setForm({
+                                                                            ...form,
+                                                                            vendorDetails: { ...form.vendorDetails!, vendorContact: e.target.value }
+                                                                        })}
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Mobile Number</label>
+                                                                    <input
+                                                                        type="text"
+                                                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-white/10"
+                                                                        placeholder="Phone"
+                                                                        value={form.vendorDetails?.vendorMobile || ''}
+                                                                        onChange={e => setForm({
+                                                                            ...form,
+                                                                            vendorDetails: { ...form.vendorDetails!, vendorMobile: e.target.value }
+                                                                        })}
+                                                                    />
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="grid grid-cols-2 gap-4">
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">City</label>
+                                                                    <input
+                                                                        type="text"
+                                                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-white/10"
+                                                                        placeholder="City"
+                                                                        value={form.vendorDetails?.vendorCity || ''}
+                                                                        onChange={e => setForm({
+                                                                            ...form,
+                                                                            vendorDetails: { ...form.vendorDetails!, vendorCity: e.target.value }
+                                                                        })}
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">State</label>
+                                                                    <input
+                                                                        type="text"
+                                                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-white/10"
+                                                                        placeholder="State"
+                                                                        value={form.vendorDetails?.vendorState || ''}
+                                                                        onChange={e => setForm({
+                                                                            ...form,
+                                                                            vendorDetails: { ...form.vendorDetails!, vendorState: e.target.value }
+                                                                        })}
+                                                                    />
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5 mt-4">
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Total Cost (INR)</label>
+                                                                    <input
+                                                                        type="number"
+                                                                        className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-white/10"
+                                                                        placeholder="Amount"
+                                                                        value={form.vendorDetails?.totalCost || ''}
+                                                                        onChange={e => setForm({
+                                                                            ...form,
+                                                                            vendorDetails: { ...form.vendorDetails!, totalCost: parseFloat(e.target.value) || 0 }
+                                                                        })}
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Timeline (Weeks)</label>
+                                                                    <input
+                                                                        type="number"
+                                                                        className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-white/10"
+                                                                        placeholder="Weeks"
+                                                                        value={form.vendorDetails?.timelineWeeks || ''}
+                                                                        onChange={e => setForm({
+                                                                            ...form,
+                                                                            vendorDetails: { ...form.vendorDetails!, timelineWeeks: parseInt(e.target.value) || 0 }
+                                                                        })}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             <div>
                                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Description</label>
@@ -745,7 +1179,7 @@ export const ProjectDetailsView: React.FC = () => {
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Company Name</label>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Company Name / Client</label>
                                                 <input
                                                     type="text"
                                                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-300"
@@ -774,6 +1208,164 @@ export const ProjectDetailsView: React.FC = () => {
                                                 </button>
                                             </div>
                                         </form>
+                                    </div>
+                                )}
+
+                                {activeTab === 'commercial' && form.type === ProjectType.VENDOR && (
+                                    <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <h2 className="text-2xl font-black text-slate-900">Commercial Details</h2>
+                                                <p className="text-slate-500 text-sm">Mandatory project costs and payment terms.</p>
+                                            </div>
+                                            <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center">
+                                                <Archive size={24} />
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white shadow-2xl border border-white/5 relative overflow-hidden group">
+                                            <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full -mr-32 -mt-32 blur-3xl transition-all group-hover:bg-blue-500/10"></div>
+
+                                            <div className="relative space-y-8">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                                    <div className="space-y-6">
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Project / Job Cost (INR)</label>
+                                                            <input
+                                                                type="number"
+                                                                required
+                                                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-lg font-black text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-white/10"
+                                                                placeholder="0.00"
+                                                                value={form.commercialDetails?.totalCost || ''}
+                                                                onChange={e => {
+                                                                    const val = parseFloat(e.target.value) || 0;
+                                                                    setForm({
+                                                                        ...form,
+                                                                        commercialDetails: {
+                                                                            ...form.commercialDetails!,
+                                                                            totalCost: val,
+                                                                            balanceAmount: val - (form.commercialDetails?.advancePaid || 0)
+                                                                        }
+                                                                    });
+                                                                }}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Rate Type</label>
+                                                            <select
+                                                                required
+                                                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer"
+                                                                value={form.commercialDetails?.rateType || 'Per Piece'}
+                                                                onChange={e => setForm({
+                                                                    ...form,
+                                                                    commercialDetails: { ...form.commercialDetails!, rateType: e.target.value as any }
+                                                                })}
+                                                            >
+                                                                <option value="Per Piece" className="bg-slate-900">Per Piece</option>
+                                                                <option value="Job Work" className="bg-slate-900">Job Work</option>
+                                                                <option value="Hourly" className="bg-slate-900">Hourly</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="space-y-6">
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Advance Paid (INR)</label>
+                                                            <input
+                                                                type="number"
+                                                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-lg font-black text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-white/10"
+                                                                placeholder="0.00"
+                                                                value={form.commercialDetails?.advancePaid || ''}
+                                                                onChange={e => {
+                                                                    const val = parseFloat(e.target.value) || 0;
+                                                                    setForm({
+                                                                        ...form,
+                                                                        commercialDetails: {
+                                                                            ...form.commercialDetails!,
+                                                                            advancePaid: val,
+                                                                            balanceAmount: (form.commercialDetails?.totalCost || 0) - val
+                                                                        }
+                                                                    });
+                                                                }}
+                                                            />
+                                                        </div>
+                                                        <div className="p-5 bg-white/5 border border-white/5 rounded-2xl">
+                                                            <label className="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-1">Auto-Calculated Balance</label>
+                                                            <div className="text-2xl font-black text-white">
+                                                                Rs. {(form.commercialDetails?.balanceAmount || 0).toLocaleString()}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-8 border-t border-white/5">
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Payment Terms</label>
+                                                        <select
+                                                            required
+                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer"
+                                                            value={form.commercialDetails?.paymentTerms || 'Advance'}
+                                                            onChange={e => setForm({
+                                                                ...form,
+                                                                commercialDetails: { ...form.commercialDetails!, paymentTerms: e.target.value as any }
+                                                            })}
+                                                        >
+                                                            <option value="Advance" className="bg-slate-900">Advance</option>
+                                                            <option value="30 Days" className="bg-slate-900">30 Days</option>
+                                                            <option value="45 Days" className="bg-slate-900">45 Days</option>
+                                                        </select>
+                                                    </div>
+                                                    <div className="flex items-center space-x-6">
+                                                        <div className="flex-1">
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">GST Applicable?</label>
+                                                            <div className="flex items-center space-x-4">
+                                                                {['Yes', 'No'].map(opt => (
+                                                                    <button
+                                                                        key={opt}
+                                                                        type="button"
+                                                                        onClick={() => setForm({
+                                                                            ...form,
+                                                                            commercialDetails: { ...form.commercialDetails!, gstApplicable: opt as any }
+                                                                        })}
+                                                                        className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${form.commercialDetails?.gstApplicable === opt
+                                                                            ? 'bg-blue-600 text-white'
+                                                                            : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
+                                                                    >
+                                                                        {opt}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {form.commercialDetails?.gstApplicable === 'Yes' && (
+                                                    <div className="pt-4 animate-in slide-in-from-top-2 duration-300">
+                                                        <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">GST Number</label>
+                                                        <input
+                                                            type="text"
+                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-white/10"
+                                                            placeholder="Enter 15-digit GSTIN"
+                                                            value={form.commercialDetails?.gstNumber || ''}
+                                                            onChange={e => setForm({
+                                                                ...form,
+                                                                commercialDetails: { ...form.commercialDetails!, gstNumber: e.target.value.toUpperCase() }
+                                                            })}
+                                                        />
+                                                    </div>
+                                                )}
+
+                                                <div className="pt-8 text-center">
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSubmit}
+                                                        className="px-12 py-4 bg-white text-slate-900 rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-blue-50 transition-all shadow-xl"
+                                                    >
+                                                        Save Commercial Records
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
 

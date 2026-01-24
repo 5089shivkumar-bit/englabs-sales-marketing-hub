@@ -57,6 +57,13 @@ export interface Customer {
   annualTurnover: number;
   projectTurnover: number;
   industry: string;
+  industryType?: 'Mechanical' | 'Automotive' | 'Fabrication' | 'Tool & Die' | 'Other';
+  zone?: 'North' | 'South' | 'West' | 'East' | 'Central';
+  machineTypes?: string[];
+  companySize?: 'Small' | 'Medium' | 'Large';
+  coords?: [number, number];
+  isDiscovered?: boolean;
+  industrialHub?: string;
   contacts: ContactPerson[];
   pricingHistory: PricingRecord[];
   lastModifiedBy?: string; // Audit field
@@ -107,16 +114,63 @@ export interface User {
 }
 
 export type ProjectStatus = 'Active' | 'Completed' | 'On Hold';
+export enum ProjectType {
+  IN_HOUSE = 'IN_HOUSE',
+  VENDOR = 'VENDOR'
+}
+
+export type VendorType = 'CNC' | 'Fabrication' | 'Casting' | 'Painting' | 'Electrical';
+
+export interface Vendor {
+  id: string;
+  name: string;
+  type: VendorType;
+  contactPerson: string;
+  mobile: string;
+  city: string;
+  state: string;
+  createdAt?: string;
+}
+
+export type RateType = 'Per Piece' | 'Job Work' | 'Hourly';
+export type PaymentTerms = 'Advance' | '30 Days' | '45 Days';
+
+export interface CommercialDetails {
+  totalCost: number;
+  rateType: RateType;
+  advancePaid: number;
+  balanceAmount: number; // calculated: totalCost - advancePaid
+  paymentTerms: PaymentTerms;
+  gstApplicable: 'Yes' | 'No';
+  gstNumber?: string;
+}
+
+export interface VendorDetails {
+  vendorId?: string; // Link to master vendor if selected
+  vendorName: string;
+  vendorType: VendorType;
+  vendorContact: string; // Contact Person Name
+  vendorMobile: string;
+  vendorCity: string;
+  vendorState: string;
+  totalCost: number;
+  timelineWeeks: number;
+  trackingLink?: string;
+  milestones?: string;
+}
 
 export interface Project {
   id: string;
   name: string;
+  type: ProjectType;
   description: string;
   startDate: string;
   endDate: string;
   status: ProjectStatus;
   createdBy: string;
   companyName: string;
+  vendorDetails?: VendorDetails;
+  commercialDetails?: CommercialDetails;
   updatedAt?: string;
 }
 
