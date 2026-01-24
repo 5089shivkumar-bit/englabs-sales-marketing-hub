@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ClipboardList, Archive, FileText, CheckCircle2, User as UserIcon, Building2, Calendar, Clock, X, Plus, LayoutGrid, List as ListIcon, MoreHorizontal, Trash2, Save, Search, FileDown, FileUp, Download, Upload } from 'lucide-react';
-import { Project, ProjectStatus, ProjectType, User, Expense, Income, VendorDetails, Vendor, VendorType } from '../types';
+import { Project, ProjectStatus, ProjectType, User, Expense, Income, VendorDetails, Vendor, VendorType, CommercialDetails } from '../types';
 import { api } from '../services/api';
 import { dataService } from '../services/dataService';
 
@@ -48,17 +48,7 @@ export const ProjectDetailsView: React.FC = () => {
         type: ProjectType;
         companyName: string;
         vendorDetails?: VendorDetails;
-        commercialDetails?: {
-            totalCost: number;
-            clientBillingAmount: number;
-            marginPercent: number;
-            rateType: 'Per Piece' | 'Job Work' | 'Hourly';
-            advancePaid: number;
-            balanceAmount: number;
-            paymentTerms: 'Advance' | '30 Days' | '45 Days';
-            gstApplicable: 'Yes' | 'No';
-            gstNumber?: string;
-        };
+        commercialDetails?: CommercialDetails;
     }>({
         name: '',
         description: '',
@@ -76,23 +66,29 @@ export const ProjectDetailsView: React.FC = () => {
             vendorMobile: '',
             vendorCity: '',
             vendorState: '',
-            vendorCost: 0,
-            clientBillingAmount: 0,
-            marginPercent: 0,
             timelineWeeks: 0,
             trackingLink: '',
             milestones: ''
         },
         commercialDetails: {
-            totalCost: 0,
-            clientBillingAmount: 0,
-            marginPercent: 0,
-            rateType: 'Per Piece',
-            advancePaid: 0,
-            balanceAmount: 0,
-            paymentTerms: 'Advance',
-            gstApplicable: 'No',
-            gstNumber: ''
+            client: {
+                projectCost: 0,
+                advanceReceived: 0,
+                balanceReceivable: 0,
+                gstAmount: 0,
+                gstApplicable: 'No',
+                gstNumber: ''
+            },
+            vendor: {
+                totalCost: 0,
+                advancePaid: 0,
+                balancePayable: 0,
+                gstAmount: 0,
+                gstApplicable: 'No',
+                gstNumber: '',
+                paymentTerms: 'Advance'
+            },
+            marginPercent: 0
         }
     });
 
@@ -144,23 +140,29 @@ export const ProjectDetailsView: React.FC = () => {
                 vendorMobile: '',
                 vendorCity: '',
                 vendorState: '',
-                vendorCost: 0,
-                clientBillingAmount: 0,
-                marginPercent: 0,
                 timelineWeeks: 0,
                 trackingLink: '',
                 milestones: ''
             },
             commercialDetails: {
-                totalCost: 0,
-                clientBillingAmount: 0,
-                marginPercent: 0,
-                rateType: 'Per Piece',
-                advancePaid: 0,
-                balanceAmount: 0,
-                paymentTerms: 'Advance',
-                gstApplicable: 'No',
-                gstNumber: ''
+                client: {
+                    projectCost: 0,
+                    advanceReceived: 0,
+                    balanceReceivable: 0,
+                    gstAmount: 0,
+                    gstApplicable: 'No',
+                    gstNumber: ''
+                },
+                vendor: {
+                    totalCost: 0,
+                    advancePaid: 0,
+                    balancePayable: 0,
+                    gstAmount: 0,
+                    gstApplicable: 'No',
+                    gstNumber: '',
+                    paymentTerms: 'Advance'
+                },
+                marginPercent: 0
             }
         });
         setShowModal(true);
@@ -185,23 +187,30 @@ export const ProjectDetailsView: React.FC = () => {
                 vendorMobile: '',
                 vendorCity: '',
                 vendorState: '',
-                vendorCost: 0,
-                clientBillingAmount: 0,
-                marginPercent: 0,
                 timelineWeeks: 0,
                 trackingLink: '',
                 milestones: ''
             },
-            commercialDetails: project.commercialDetails || {
-                totalCost: 0,
-                clientBillingAmount: 0,
-                marginPercent: 0,
-                rateType: 'Per Piece',
-                advancePaid: 0,
-                balanceAmount: 0,
-                paymentTerms: 'Advance',
-                gstApplicable: 'No',
-                gstNumber: ''
+            commercialDetails: project.commercialDetails?.client ? project.commercialDetails : {
+                client: {
+                    projectCost: (project.commercialDetails as any)?.clientBillingAmount || 0,
+                    advanceReceived: (project.commercialDetails as any)?.advancePaid || 0,
+                    balanceReceivable: (project.commercialDetails as any)?.balanceAmount || 0,
+                    gstAmount: 0,
+                    gstApplicable: (project.commercialDetails as any)?.gstApplicable || 'No',
+                    gstNumber: (project.commercialDetails as any)?.gstNumber || ''
+                },
+                vendor: {
+                    totalCost: (project.commercialDetails as any)?.totalCost || 0,
+                    advancePaid: 0,
+                    balancePayable: (project.commercialDetails as any)?.totalCost || 0,
+                    gstAmount: 0,
+                    gstApplicable: 'No',
+                    gstNumber: '',
+                    paymentTerms: 'Advance'
+                },
+                marginPercent: project.commercialDetails?.marginPercent || 0,
+                rateType: project.commercialDetails?.rateType
             }
         });
         setShowModal(true);
@@ -580,17 +589,18 @@ export const ProjectDetailsView: React.FC = () => {
         if (editingProject.type === ProjectType.VENDOR && editingProject.commercialDetails) {
             rows.push(['---', '---']);
             rows.push(['[ Commercial Details ]', '']);
-            rows.push(['Vendor Cost', `Rs. ${editingProject.commercialDetails.totalCost}`]);
-            rows.push(['Client Billing', `Rs. ${editingProject.commercialDetails.clientBillingAmount}`]);
             rows.push(['Margin %', `${editingProject.commercialDetails.marginPercent}%`]);
-            rows.push(['Rate Type', editingProject.commercialDetails.rateType]);
-            rows.push(['Advance Paid', `Rs. ${editingProject.commercialDetails.advancePaid}`]);
-            rows.push(['Balance Amount', `Rs. ${editingProject.commercialDetails.balanceAmount}`]);
-            rows.push(['Payment Terms', editingProject.commercialDetails.paymentTerms]);
-            rows.push(['GST Applicable', editingProject.commercialDetails.gstApplicable]);
-            if (editingProject.commercialDetails.gstApplicable === 'Yes') {
-                rows.push(['GST Number', editingProject.commercialDetails.gstNumber || 'N/A']);
-            }
+            rows.push(['---', 'Client Income']);
+            rows.push(['Client Project Cost', `Rs. ${editingProject.commercialDetails.client?.projectCost || 0}`]);
+            rows.push(['Advance Received', `Rs. ${editingProject.commercialDetails.client?.advanceReceived || 0}`]);
+            rows.push(['Balance Receivable', `Rs. ${editingProject.commercialDetails.client?.balanceReceivable || 0}`]);
+            rows.push(['Client GST Amount', `Rs. ${editingProject.commercialDetails.client?.gstAmount || 0}`]);
+            rows.push(['---', 'Vendor Expenditure']);
+            rows.push(['Vendor Total Cost', `Rs. ${editingProject.commercialDetails.vendor?.totalCost || 0}`]);
+            rows.push(['Vendor Advance Paid', `Rs. ${editingProject.commercialDetails.vendor?.advancePaid || 0}`]);
+            rows.push(['Vendor Balance Payable', `Rs. ${editingProject.commercialDetails.vendor?.balancePayable || 0}`]);
+            rows.push(['Vendor GST Amount', `Rs. ${editingProject.commercialDetails.vendor?.gstAmount || 0}`]);
+            rows.push(['Payment Terms', editingProject.commercialDetails.vendor?.paymentTerms || 'N/A']);
         }
 
         dataService.exportPDF(`Project_Report_${editingProject.name}`, columns, rows);
@@ -610,15 +620,14 @@ export const ProjectDetailsView: React.FC = () => {
                 'Vendor Name': editingProject.vendorDetails?.vendorName,
                 'Vendor Contact': editingProject.vendorDetails?.vendorContact,
                 'Timeline (Weeks)': editingProject.vendorDetails?.timelineWeeks,
-                'Vendor Cost': editingProject.commercialDetails?.totalCost,
-                'Client Billing': editingProject.commercialDetails?.clientBillingAmount,
                 'Margin %': editingProject.commercialDetails?.marginPercent,
-                'Rate Type': editingProject.commercialDetails?.rateType,
-                'Advance Paid': editingProject.commercialDetails?.advancePaid,
-                'Balance Amount': editingProject.commercialDetails?.balanceAmount,
-                'Payment Terms': editingProject.commercialDetails?.paymentTerms,
-                'GST Applicable': editingProject.commercialDetails?.gstApplicable,
-                'GST Number': editingProject.commercialDetails?.gstNumber
+                'Client Project Cost': editingProject.commercialDetails?.client?.projectCost,
+                'Client Advance Received': editingProject.commercialDetails?.client?.advanceReceived,
+                'Client Balance Receivable': editingProject.commercialDetails?.client?.balanceReceivable,
+                'Vendor Total Cost': editingProject.commercialDetails?.vendor?.totalCost,
+                'Vendor Advance Paid': editingProject.commercialDetails?.vendor?.advancePaid,
+                'Vendor Balance Payable': editingProject.commercialDetails?.vendor?.balancePayable,
+                'Vendor Payment Terms': editingProject.commercialDetails?.vendor?.paymentTerms
             } : {})
         };
         dataService.exportExcel([data], `Project_Report_${editingProject.name}`, 'Overview');
@@ -825,12 +834,12 @@ export const ProjectDetailsView: React.FC = () => {
                                         <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-slate-50">
                                             <div className="bg-slate-50 p-2 rounded-xl">
                                                 <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Billing</p>
-                                                <p className="text-xs font-black text-slate-900">₹{project.vendorDetails?.clientBillingAmount || 0}</p>
+                                                <p className="text-xs font-black text-slate-900">₹{project.commercialDetails?.client?.projectCost || 0}</p>
                                             </div>
                                             <div className="bg-slate-50 p-2 rounded-xl">
                                                 <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Margin</p>
-                                                <p className={`text-xs font-black ${project.vendorDetails?.marginPercent && project.vendorDetails.marginPercent > 0 ? 'text-emerald-500' : 'text-amber-500'}`}>
-                                                    {project.vendorDetails?.marginPercent || 0}%
+                                                <p className={`text-xs font-black ${project.commercialDetails?.marginPercent && project.commercialDetails.marginPercent > 0 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                                                    {project.commercialDetails?.marginPercent || 0}%
                                                 </p>
                                             </div>
                                         </div>
@@ -893,9 +902,9 @@ export const ProjectDetailsView: React.FC = () => {
                                     <td className="px-6 py-5">
                                         {project.type === ProjectType.VENDOR ? (
                                             <div className="flex flex-col">
-                                                <span className="text-[10px] font-bold text-slate-900 leading-none mb-1">₹{project.vendorDetails?.clientBillingAmount || 0}</span>
-                                                <span className={`text-[9px] font-black ${project.vendorDetails?.marginPercent && project.vendorDetails.marginPercent > 0 ? 'text-emerald-500' : 'text-amber-500'}`}>
-                                                    {project.vendorDetails?.marginPercent || 0}% Margin
+                                                <span className="text-[10px] font-bold text-slate-900 leading-none mb-1">₹{project.commercialDetails?.client?.projectCost || 0}</span>
+                                                <span className={`text-[9px] font-black ${project.commercialDetails?.marginPercent && project.commercialDetails.marginPercent > 0 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                                                    {project.commercialDetails?.marginPercent || 0}% Margin
                                                 </span>
                                             </div>
                                         ) : (
@@ -1136,60 +1145,7 @@ export const ProjectDetailsView: React.FC = () => {
                                                                 </div>
                                                             </div>
 
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-white/5 mt-4">
-                                                                <div>
-                                                                    <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Vendor Cost (Total INR)</label>
-                                                                    <input
-                                                                        type="number"
-                                                                        className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-white/10"
-                                                                        placeholder="Vendor Cost"
-                                                                        value={form.vendorDetails?.vendorCost || ''}
-                                                                        onChange={e => {
-                                                                            const cost = parseFloat(e.target.value) || 0;
-                                                                            const billing = form.vendorDetails?.clientBillingAmount || 0;
-                                                                            const margin = billing > 0 ? ((billing - cost) / billing) * 100 : 0;
-                                                                            setForm({
-                                                                                ...form,
-                                                                                vendorDetails: {
-                                                                                    ...form.vendorDetails!,
-                                                                                    vendorCost: cost,
-                                                                                    marginPercent: parseFloat(margin.toFixed(2))
-                                                                                }
-                                                                            });
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <label className="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">Client Billing Amount</label>
-                                                                    <input
-                                                                        type="number"
-                                                                        className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 transition-all placeholder:text-white/10"
-                                                                        placeholder="Billing Amount"
-                                                                        value={form.vendorDetails?.clientBillingAmount || ''}
-                                                                        onChange={e => {
-                                                                            const billing = parseFloat(e.target.value) || 0;
-                                                                            const cost = form.vendorDetails?.vendorCost || 0;
-                                                                            const margin = billing > 0 ? ((billing - cost) / billing) * 100 : 0;
-                                                                            setForm({
-                                                                                ...form,
-                                                                                vendorDetails: {
-                                                                                    ...form.vendorDetails!,
-                                                                                    clientBillingAmount: billing,
-                                                                                    marginPercent: parseFloat(margin.toFixed(2))
-                                                                                }
-                                                                            });
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                            </div>
-
-                                                            <div className="grid grid-cols-2 gap-4 mt-4">
-                                                                <div className="p-3 bg-white/5 rounded-xl border border-white/5">
-                                                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Margin % (Auto)</label>
-                                                                    <div className={`text-lg font-black ${form.vendorDetails?.marginPercent && form.vendorDetails.marginPercent > 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                                                        {form.vendorDetails?.marginPercent || 0}%
-                                                                    </div>
-                                                                </div>
+                                                            <div className="pt-4 border-t border-white/5 mt-4">
                                                                 <div>
                                                                     <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Timeline (Weeks)</label>
                                                                     <input
@@ -1298,13 +1254,13 @@ export const ProjectDetailsView: React.FC = () => {
                                 )}
 
                                 {activeTab === 'commercial' && form.type === ProjectType.VENDOR && (
-                                    <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
                                         <div className="flex justify-between items-center">
                                             <div>
-                                                <h2 className="text-2xl font-black text-slate-900">Commercial Details</h2>
-                                                <p className="text-slate-500 text-sm">Mandatory project costs and payment terms.</p>
+                                                <h2 className="text-2xl font-black text-slate-900">Commercial Layers</h2>
+                                                <p className="text-slate-500 text-sm">Manage Client Billing and Vendor Expenditure.</p>
                                             </div>
-                                            <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center">
+                                            <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
                                                 <Archive size={24} />
                                             </div>
                                         </div>
@@ -1312,176 +1268,225 @@ export const ProjectDetailsView: React.FC = () => {
                                         <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white shadow-2xl border border-white/5 relative overflow-hidden group">
                                             <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full -mr-32 -mt-32 blur-3xl transition-all group-hover:bg-blue-500/10"></div>
 
-                                            <div className="relative space-y-8">
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                                    <div className="space-y-6">
+                                            <div className="relative space-y-12">
+                                                {/* SECTION A: CLIENT COMMERCIAL */}
+                                                <div className="space-y-6">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <h4 className="text-xs font-black text-blue-400 uppercase tracking-[0.2em]">🔹 A. Client Commercial (Income)</h4>
+                                                        <div className={`px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${form.commercialDetails?.marginPercent && form.commercialDetails.marginPercent > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                                                            Margin: {form.commercialDetails?.marginPercent || 0}%
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                                                         <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vendor Cost (INR)</label>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Project Cost (Client)</label>
                                                             <input
                                                                 type="number"
-                                                                required
-                                                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-lg font-black text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-white/10"
-                                                                placeholder="0.00"
-                                                                value={form.commercialDetails?.totalCost || ''}
+                                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all"
+                                                                value={form.commercialDetails?.client?.projectCost || ''}
                                                                 onChange={e => {
                                                                     const cost = parseFloat(e.target.value) || 0;
-                                                                    const billing = form.commercialDetails?.clientBillingAmount || 0;
-                                                                    const margin = billing > 0 ? ((billing - cost) / billing) * 100 : 0;
+                                                                    const vCost = form.commercialDetails?.vendor?.totalCost || 0;
+                                                                    const margin = cost > 0 ? ((cost - vCost) / cost) * 100 : 0;
                                                                     setForm({
                                                                         ...form,
                                                                         commercialDetails: {
                                                                             ...form.commercialDetails!,
-                                                                            totalCost: cost,
-                                                                            marginPercent: parseFloat(margin.toFixed(2))
+                                                                            marginPercent: parseFloat(margin.toFixed(2)),
+                                                                            client: {
+                                                                                ...form.commercialDetails!.client,
+                                                                                projectCost: cost,
+                                                                                balanceReceivable: cost - (form.commercialDetails!.client.advanceReceived || 0)
+                                                                            }
                                                                         }
                                                                     });
                                                                 }}
                                                             />
                                                         </div>
                                                         <div>
-                                                            <label className="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">Client Billing Amount (INR)</label>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Advance Received</label>
                                                             <input
                                                                 type="number"
-                                                                required
-                                                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-lg font-black text-white focus:outline-none focus:border-emerald-500 transition-all placeholder:text-white/10"
-                                                                placeholder="0.00"
-                                                                value={form.commercialDetails?.clientBillingAmount || ''}
+                                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all"
+                                                                value={form.commercialDetails?.client?.advanceReceived || ''}
                                                                 onChange={e => {
-                                                                    const billing = parseFloat(e.target.value) || 0;
-                                                                    const cost = form.commercialDetails?.totalCost || 0;
-                                                                    const margin = billing > 0 ? ((billing - cost) / billing) * 100 : 0;
+                                                                    const adv = parseFloat(e.target.value) || 0;
                                                                     setForm({
                                                                         ...form,
                                                                         commercialDetails: {
                                                                             ...form.commercialDetails!,
-                                                                            clientBillingAmount: billing,
-                                                                            balanceAmount: billing - (form.commercialDetails?.advancePaid || 0),
-                                                                            marginPercent: parseFloat(margin.toFixed(2))
+                                                                            client: {
+                                                                                ...form.commercialDetails!.client,
+                                                                                advanceReceived: adv,
+                                                                                balanceReceivable: (form.commercialDetails!.client.projectCost || 0) - adv
+                                                                            }
                                                                         }
                                                                     });
                                                                 }}
                                                             />
                                                         </div>
                                                         <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Rate Type</label>
+                                                            <label className="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-2">Balance Receivable</label>
+                                                            <div className="w-full bg-white/5 border border-white/5 rounded-xl px-4 py-3 text-sm font-black text-white/50">
+                                                                ₹{(form.commercialDetails?.client?.balanceReceivable || 0).toLocaleString()}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">GST (Client)</label>
+                                                            <div className="flex items-center space-x-2">
+                                                                <input
+                                                                    type="number"
+                                                                    placeholder="Amount"
+                                                                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all"
+                                                                    value={form.commercialDetails?.client?.gstAmount || ''}
+                                                                    onChange={e => setForm({
+                                                                        ...form,
+                                                                        commercialDetails: {
+                                                                            ...form.commercialDetails!,
+                                                                            client: { ...form.commercialDetails!.client, gstAmount: parseFloat(e.target.value) || 0 }
+                                                                        }
+                                                                    })}
+                                                                />
+                                                                <select
+                                                                    className="bg-white/5 border border-white/10 rounded-xl px-2 py-3 text-[10px] font-black text-white focus:outline-none"
+                                                                    value={form.commercialDetails?.client?.gstApplicable || 'No'}
+                                                                    onChange={e => setForm({
+                                                                        ...form,
+                                                                        commercialDetails: {
+                                                                            ...form.commercialDetails!,
+                                                                            client: { ...form.commercialDetails!.client, gstApplicable: e.target.value as any }
+                                                                        }
+                                                                    })}
+                                                                >
+                                                                    <option value="Yes" className="bg-slate-900">YES</option>
+                                                                    <option value="No" className="bg-slate-900">NO</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* SECTION B: VENDOR COMMERCIAL */}
+                                                <div className="space-y-6 pt-12 border-t border-white/5">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <h4 className="text-xs font-black text-emerald-400 uppercase tracking-[0.2em]">🔹 B. Vendor Commercial</h4>
+                                                        <div className="flex items-center space-x-2">
+                                                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Payment Terms:</p>
                                                             <select
-                                                                required
-                                                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer"
-                                                                value={form.commercialDetails?.rateType || 'Per Piece'}
+                                                                className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-1 text-[10px] font-black text-emerald-400 focus:outline-none appearance-none cursor-pointer"
+                                                                value={form.commercialDetails?.vendor?.paymentTerms || 'Advance'}
                                                                 onChange={e => setForm({
                                                                     ...form,
-                                                                    commercialDetails: { ...form.commercialDetails!, rateType: e.target.value as any }
+                                                                    commercialDetails: {
+                                                                        ...form.commercialDetails!,
+                                                                        vendor: { ...form.commercialDetails!.vendor, paymentTerms: e.target.value as any }
+                                                                    }
                                                                 })}
                                                             >
-                                                                <option value="Per Piece" className="bg-slate-900">Per Piece</option>
-                                                                <option value="Job Work" className="bg-slate-900">Job Work</option>
-                                                                <option value="Hourly" className="bg-slate-900">Hourly</option>
+                                                                <option value="Advance" className="bg-slate-900">Advance</option>
+                                                                <option value="Milestone" className="bg-slate-900">Milestone</option>
+                                                                <option value="After Delivery" className="bg-slate-900">After Delivery</option>
                                                             </select>
                                                         </div>
                                                     </div>
 
-                                                    <div className="space-y-6">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                                                         <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Advance Paid (INR)</label>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vendor Total Cost</label>
                                                             <input
                                                                 type="number"
-                                                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-lg font-black text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-white/10"
-                                                                placeholder="0.00"
-                                                                value={form.commercialDetails?.advancePaid || ''}
+                                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 transition-all"
+                                                                value={form.commercialDetails?.vendor?.totalCost || ''}
                                                                 onChange={e => {
-                                                                    const val = parseFloat(e.target.value) || 0;
+                                                                    const cost = parseFloat(e.target.value) || 0;
+                                                                    const cCost = form.commercialDetails?.client?.projectCost || 0;
+                                                                    const margin = cCost > 0 ? ((cCost - cost) / cCost) * 100 : 0;
                                                                     setForm({
                                                                         ...form,
                                                                         commercialDetails: {
                                                                             ...form.commercialDetails!,
-                                                                            advancePaid: val,
-                                                                            balanceAmount: (form.commercialDetails?.clientBillingAmount || 0) - val
+                                                                            marginPercent: parseFloat(margin.toFixed(2)),
+                                                                            vendor: {
+                                                                                ...form.commercialDetails!.vendor,
+                                                                                totalCost: cost,
+                                                                                balancePayable: cost - (form.commercialDetails!.vendor.advancePaid || 0)
+                                                                            }
                                                                         }
                                                                     });
                                                                 }}
                                                             />
                                                         </div>
-                                                        <div className="grid grid-cols-2 gap-4">
-                                                            <div className="p-5 bg-white/5 border border-white/5 rounded-2xl">
-                                                                <label className="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-1">Margin % (Auto)</label>
-                                                                <div className={`text-2xl font-black ${form.commercialDetails?.marginPercent && form.commercialDetails.marginPercent > 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                                                    {form.commercialDetails?.marginPercent || 0}%
-                                                                </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vendor Advance Paid</label>
+                                                            <input
+                                                                type="number"
+                                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 transition-all"
+                                                                value={form.commercialDetails?.vendor?.advancePaid || ''}
+                                                                onChange={e => {
+                                                                    const adv = parseFloat(e.target.value) || 0;
+                                                                    setForm({
+                                                                        ...form,
+                                                                        commercialDetails: {
+                                                                            ...form.commercialDetails!,
+                                                                            vendor: {
+                                                                                ...form.commercialDetails!.vendor,
+                                                                                advancePaid: adv,
+                                                                                balancePayable: (form.commercialDetails!.vendor.totalCost || 0) - adv
+                                                                            }
+                                                                        }
+                                                                    });
+                                                                }}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-rose-400 uppercase tracking-widest mb-2">Vendor Balance Payable</label>
+                                                            <div className="w-full bg-white/5 border border-white/5 rounded-xl px-4 py-3 text-sm font-black text-white/50">
+                                                                ₹{(form.commercialDetails?.vendor?.balancePayable || 0).toLocaleString()}
                                                             </div>
-                                                            <div className="p-5 bg-white/5 border border-white/5 rounded-2xl">
-                                                                <label className="block text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Calculated Balance</label>
-                                                                <div className="text-2xl font-black text-white">
-                                                                    Rs. {(form.commercialDetails?.balanceAmount || 0).toLocaleString()}
-                                                                </div>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vendor GST</label>
+                                                            <div className="flex items-center space-x-2">
+                                                                <input
+                                                                    type="number"
+                                                                    placeholder="Amount"
+                                                                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 transition-all"
+                                                                    value={form.commercialDetails?.vendor?.gstAmount || ''}
+                                                                    onChange={e => setForm({
+                                                                        ...form,
+                                                                        commercialDetails: {
+                                                                            ...form.commercialDetails!,
+                                                                            vendor: { ...form.commercialDetails!.vendor, gstAmount: parseFloat(e.target.value) || 0 }
+                                                                        }
+                                                                    })}
+                                                                />
+                                                                <select
+                                                                    className="bg-white/5 border border-white/10 rounded-xl px-2 py-3 text-[10px] font-black text-white focus:outline-none"
+                                                                    value={form.commercialDetails?.vendor?.gstApplicable || 'No'}
+                                                                    onChange={e => setForm({
+                                                                        ...form,
+                                                                        commercialDetails: {
+                                                                            ...form.commercialDetails!,
+                                                                            vendor: { ...form.commercialDetails!.vendor, gstApplicable: e.target.value as any }
+                                                                        }
+                                                                    })}
+                                                                >
+                                                                    <option value="Yes" className="bg-slate-900">YES</option>
+                                                                    <option value="No" className="bg-slate-900">NO</option>
+                                                                </select>
                                                             </div>
                                                         </div>
                                                     </div>
                                                 </div>
-
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-8 border-t border-white/5">
-                                                    <div>
-                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Payment Terms</label>
-                                                        <select
-                                                            required
-                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer"
-                                                            value={form.commercialDetails?.paymentTerms || 'Advance'}
-                                                            onChange={e => setForm({
-                                                                ...form,
-                                                                commercialDetails: { ...form.commercialDetails!, paymentTerms: e.target.value as any }
-                                                            })}
-                                                        >
-                                                            <option value="Advance" className="bg-slate-900">Advance</option>
-                                                            <option value="30 Days" className="bg-slate-900">30 Days</option>
-                                                            <option value="45 Days" className="bg-slate-900">45 Days</option>
-                                                        </select>
-                                                    </div>
-                                                    <div className="flex items-center space-x-6">
-                                                        <div className="flex-1">
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">GST Applicable?</label>
-                                                            <div className="flex items-center space-x-4">
-                                                                {['Yes', 'No'].map(opt => (
-                                                                    <button
-                                                                        key={opt}
-                                                                        type="button"
-                                                                        onClick={() => setForm({
-                                                                            ...form,
-                                                                            commercialDetails: { ...form.commercialDetails!, gstApplicable: opt as any }
-                                                                        })}
-                                                                        className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${form.commercialDetails?.gstApplicable === opt
-                                                                            ? 'bg-blue-600 text-white'
-                                                                            : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
-                                                                    >
-                                                                        {opt}
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {form.commercialDetails?.gstApplicable === 'Yes' && (
-                                                    <div className="pt-4 animate-in slide-in-from-top-2 duration-300">
-                                                        <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">GST Number</label>
-                                                        <input
-                                                            type="text"
-                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-white/10"
-                                                            placeholder="Enter 15-digit GSTIN"
-                                                            value={form.commercialDetails?.gstNumber || ''}
-                                                            onChange={e => setForm({
-                                                                ...form,
-                                                                commercialDetails: { ...form.commercialDetails!, gstNumber: e.target.value.toUpperCase() }
-                                                            })}
-                                                        />
-                                                    </div>
-                                                )}
 
                                                 <div className="pt-8 text-center">
                                                     <button
                                                         type="button"
                                                         onClick={handleSubmit}
-                                                        className="px-12 py-4 bg-white text-slate-900 rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-blue-50 transition-all shadow-xl"
+                                                        className="px-12 py-4 bg-white text-slate-900 rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-blue-50 transition-all shadow-xl active:scale-95"
                                                     >
-                                                        Save Commercial Records
+                                                        Save All Commercial Layers
                                                     </button>
                                                 </div>
                                             </div>

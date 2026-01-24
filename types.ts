@@ -133,18 +133,32 @@ export interface Vendor {
 }
 
 export type RateType = 'Per Piece' | 'Job Work' | 'Hourly';
-export type PaymentTerms = 'Advance' | '30 Days' | '45 Days';
+export type PaymentTerms = 'Advance' | 'Milestone' | 'After Delivery';
 
-export interface CommercialDetails {
-  totalCost: number; // For In-House this might be used differently, but for Vendor it's often the vendor cost
-  clientBillingAmount: number;
-  marginPercent: number; // Auto-calculated: ((Billing - Cost) / Billing) * 100
-  rateType: RateType;
-  advancePaid: number;
-  balanceAmount: number; // calculated: clientBillingAmount - advancePaid (usually)
-  paymentTerms: PaymentTerms;
+export interface ClientCommercial {
+  projectCost: number;
+  advanceReceived: number;
+  balanceReceivable: number;
+  gstAmount: number;
   gstApplicable: 'Yes' | 'No';
   gstNumber?: string;
+}
+
+export interface VendorCommercial {
+  totalCost: number;
+  advancePaid: number;
+  balancePayable: number;
+  gstAmount: number;
+  gstApplicable: 'Yes' | 'No';
+  gstNumber?: string;
+  paymentTerms: PaymentTerms;
+}
+
+export interface CommercialDetails {
+  client: ClientCommercial;
+  vendor: VendorCommercial;
+  marginPercent: number;
+  rateType?: RateType; // Keep for legacy/flexibility
 }
 
 export interface VendorDetails {
@@ -155,9 +169,6 @@ export interface VendorDetails {
   vendorMobile: string;
   vendorCity: string;
   vendorState: string;
-  vendorCost: number;
-  clientBillingAmount: number;
-  marginPercent: number;
   timelineWeeks: number;
   trackingLink?: string;
   milestones?: string;
