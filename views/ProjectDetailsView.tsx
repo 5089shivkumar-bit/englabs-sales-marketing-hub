@@ -580,7 +580,9 @@ export const ProjectDetailsView: React.FC = () => {
         if (editingProject.type === ProjectType.VENDOR && editingProject.commercialDetails) {
             rows.push(['---', '---']);
             rows.push(['[ Commercial Details ]', '']);
-            rows.push(['Project Cost', `Rs. ${editingProject.commercialDetails.totalCost}`]);
+            rows.push(['Vendor Cost', `Rs. ${editingProject.commercialDetails.totalCost}`]);
+            rows.push(['Client Billing', `Rs. ${editingProject.commercialDetails.clientBillingAmount}`]);
+            rows.push(['Margin %', `${editingProject.commercialDetails.marginPercent}%`]);
             rows.push(['Rate Type', editingProject.commercialDetails.rateType]);
             rows.push(['Advance Paid', `Rs. ${editingProject.commercialDetails.advancePaid}`]);
             rows.push(['Balance Amount', `Rs. ${editingProject.commercialDetails.balanceAmount}`]);
@@ -608,7 +610,9 @@ export const ProjectDetailsView: React.FC = () => {
                 'Vendor Name': editingProject.vendorDetails?.vendorName,
                 'Vendor Contact': editingProject.vendorDetails?.vendorContact,
                 'Timeline (Weeks)': editingProject.vendorDetails?.timelineWeeks,
-                'Project Cost': editingProject.commercialDetails?.totalCost,
+                'Vendor Cost': editingProject.commercialDetails?.totalCost,
+                'Client Billing': editingProject.commercialDetails?.clientBillingAmount,
+                'Margin %': editingProject.commercialDetails?.marginPercent,
                 'Rate Type': editingProject.commercialDetails?.rateType,
                 'Advance Paid': editingProject.commercialDetails?.advancePaid,
                 'Balance Amount': editingProject.commercialDetails?.balanceAmount,
