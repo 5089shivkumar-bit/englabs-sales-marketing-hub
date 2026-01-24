@@ -414,6 +414,51 @@ export const api = {
             if (error) throw error;
         }
     },
+    extraExpenses: {
+        async fetchByProject(projectId: string): Promise<any[]> {
+            const { data, error } = await supabase
+                .from('project_extra_expenses')
+                .select('*')
+                .eq('project_id', projectId)
+                .order('date', { ascending: false });
+
+            if (error) {
+                if (error.code === '42P01') return [];
+                throw error;
+            }
+            return data?.map((e: any) => ({
+                id: e.id,
+                projectId: e.project_id,
+                date: e.date,
+                type: e.type,
+                amount: e.amount,
+                mode: e.mode,
+                reference: e.reference,
+                remarks: e.remarks,
+                addedBy: e.added_by,
+                createdAt: e.created_at
+            })) || [];
+        },
+        async create(expense: any): Promise<any> {
+            const { data, error } = await supabase.from('project_extra_expenses').insert({
+                project_id: expense.projectId,
+                date: expense.date,
+                type: expense.type,
+                amount: expense.amount,
+                mode: expense.mode,
+                reference: expense.reference,
+                remarks: expense.remarks,
+                added_by: expense.addedBy
+            }).select().single();
+
+            if (error) throw error;
+            return { ...expense, id: data.id };
+        },
+        async delete(id: string): Promise<void> {
+            const { error } = await supabase.from('project_extra_expenses').delete().eq('id', id);
+            if (error) throw error;
+        }
+    },
     vendors: {
         async fetchAll(): Promise<Vendor[]> {
             try {

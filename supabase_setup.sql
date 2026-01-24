@@ -50,6 +50,23 @@ UPDATE public.projects
 SET project_type = 'VENDOR' 
 WHERE vendor_details IS NOT NULL AND (project_type = 'IN_HOUSE' OR project_type IS NULL);
 
+-- 5. Create Extra Expenses Table
+CREATE TABLE IF NOT EXISTS public.project_extra_expenses (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    type TEXT NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    mode TEXT NOT NULL,
+    reference TEXT,
+    remarks TEXT,
+    added_by TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+ALTER TABLE public.project_extra_expenses ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public access to project_extra_expenses" ON public.project_extra_expenses FOR ALL USING (true);
+
 -- ==========================================
 -- SCRIPT COMPLETE - CLICK 'RUN' IN SUPABASE
 -- ==========================================

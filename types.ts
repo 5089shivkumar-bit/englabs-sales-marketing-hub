@@ -135,6 +135,17 @@ export interface Vendor {
 export type RateType = 'Per Piece' | 'Job Work' | 'Hourly';
 export type PaymentTerms = 'Advance' | 'Milestone' | 'After Delivery';
 
+export interface ClientPayment {
+  id: string;
+  date: string;
+  invoiceNo?: string;
+  amount: number;
+  mode: 'Cash' | 'Bank' | 'UPI';
+  reference: string;
+  addedBy: string;
+  notes?: string;
+}
+
 export interface ClientCommercial {
   projectCost: number;
   advanceReceived: number;
@@ -142,6 +153,18 @@ export interface ClientCommercial {
   gstAmount: number;
   gstApplicable: 'Yes' | 'No';
   gstNumber?: string;
+  payments?: ClientPayment[];
+}
+
+export interface VendorPayment {
+  id: string;
+  date: string;
+  voucherNo: string;
+  amount: number;
+  mode: 'Cash' | 'Bank' | 'UPI';
+  reference: string;
+  paidBy: string;
+  remarks?: string;
 }
 
 export interface VendorCommercial {
@@ -152,6 +175,7 @@ export interface VendorCommercial {
   gstApplicable: 'Yes' | 'No';
   gstNumber?: string;
   paymentTerms: PaymentTerms;
+  payments?: VendorPayment[];
 }
 
 export interface CommercialDetails {
@@ -210,5 +234,18 @@ export interface Income {
   invoiceNumber: string;
   receivedDate: string;
   status: 'Pending' | 'Received';
+  createdAt?: string;
+}
+
+export interface ExtraExpense {
+  id: string;
+  projectId: string;
+  date: string;
+  type: string;
+  amount: number;
+  mode: 'Cash' | 'Bank' | 'UPI';
+  reference: string;
+  remarks?: string;
+  addedBy: string;
   createdAt?: string;
 }

@@ -1,13 +1,30 @@
 
 import React, { useState, useEffect } from 'react';
 import { ClipboardList, Archive, FileText, CheckCircle2, User as UserIcon, Building2, Calendar, Clock, X, Plus, LayoutGrid, List as ListIcon, MoreHorizontal, Trash2, Save, Search, FileDown, FileUp, Download, Upload } from 'lucide-react';
-import { Project, ProjectStatus, ProjectType, User, Expense, Income, VendorDetails, Vendor, VendorType, CommercialDetails } from '../types';
+import { Project, ProjectStatus, ProjectType, User, Expense, Income, VendorDetails, Vendor, VendorType, CommercialDetails, ClientPayment, VendorPayment } from '../types';
 import { api } from '../services/api';
 import { dataService } from '../services/dataService';
 
 export const ProjectDetailsView: React.FC = () => {
     const [projects, setProjects] = useState<Project[]>([]);
     const [loading, setLoading] = useState(true);
+    const [activeCommercialTab, setActiveCommercialTab] = useState<'client' | 'vendor' | 'downloads'>('client');
+    const [newClientPayment, setNewClientPayment] = useState<Partial<ClientPayment>>({
+        date: new Date().toISOString().split('T')[0],
+        mode: 'Bank',
+        amount: 0,
+        reference: '',
+        invoiceNo: '',
+        notes: ''
+    });
+    const [newVendorPayment, setNewVendorPayment] = useState<Partial<VendorPayment>>({
+        date: new Date().toISOString().split('T')[0],
+        mode: 'Bank',
+        amount: 0,
+        reference: '',
+        voucherNo: '',
+        remarks: ''
+    });
     const [showModal, setShowModal] = useState(false);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -77,7 +94,8 @@ export const ProjectDetailsView: React.FC = () => {
                 balanceReceivable: 0,
                 gstAmount: 0,
                 gstApplicable: 'No',
-                gstNumber: ''
+                gstNumber: '',
+                payments: []
             },
             vendor: {
                 totalCost: 0,
@@ -86,7 +104,8 @@ export const ProjectDetailsView: React.FC = () => {
                 gstAmount: 0,
                 gstApplicable: 'No',
                 gstNumber: '',
-                paymentTerms: 'Advance'
+                paymentTerms: 'Advance',
+                payments: []
             },
             marginPercent: 0
         }
@@ -151,7 +170,8 @@ export const ProjectDetailsView: React.FC = () => {
                     balanceReceivable: 0,
                     gstAmount: 0,
                     gstApplicable: 'No',
-                    gstNumber: ''
+                    gstNumber: '',
+                    payments: []
                 },
                 vendor: {
                     totalCost: 0,
@@ -160,7 +180,8 @@ export const ProjectDetailsView: React.FC = () => {
                     gstAmount: 0,
                     gstApplicable: 'No',
                     gstNumber: '',
-                    paymentTerms: 'Advance'
+                    paymentTerms: 'Advance',
+                    payments: []
                 },
                 marginPercent: 0
             }
@@ -191,14 +212,25 @@ export const ProjectDetailsView: React.FC = () => {
                 trackingLink: '',
                 milestones: ''
             },
-            commercialDetails: project.commercialDetails?.client ? project.commercialDetails : {
+            commercialDetails: project.commercialDetails?.client ? {
+                ...project.commercialDetails,
+                client: {
+                    ...project.commercialDetails.client,
+                    payments: project.commercialDetails.client.payments || []
+                },
+                vendor: {
+                    ...project.commercialDetails.vendor,
+                    payments: project.commercialDetails.vendor.payments || []
+                }
+            } : {
                 client: {
                     projectCost: (project.commercialDetails as any)?.clientBillingAmount || 0,
                     advanceReceived: (project.commercialDetails as any)?.advancePaid || 0,
                     balanceReceivable: (project.commercialDetails as any)?.balanceAmount || 0,
                     gstAmount: 0,
                     gstApplicable: (project.commercialDetails as any)?.gstApplicable || 'No',
-                    gstNumber: (project.commercialDetails as any)?.gstNumber || ''
+                    gstNumber: (project.commercialDetails as any)?.gstNumber || '',
+                    payments: []
                 },
                 vendor: {
                     totalCost: (project.commercialDetails as any)?.totalCost || 0,
@@ -207,13 +239,94 @@ export const ProjectDetailsView: React.FC = () => {
                     gstAmount: 0,
                     gstApplicable: 'No',
                     gstNumber: '',
-                    paymentTerms: 'Advance'
+                    paymentTerms: 'Advance',
+                    payments: []
                 },
                 marginPercent: project.commercialDetails?.marginPercent || 0,
                 rateType: project.commercialDetails?.rateType
             }
         });
         setShowModal(true);
+    };
+
+    const handleAddClientPayment = () => {
+        if (!newClientPayment.amount) return;
+        const payment: ClientPayment = {
+            id: crypto.randomUUID(),
+            date: newClientPayment.date || '',
+            amount: newClientPayment.amount || 0,
+            mode: newClientPayment.mode as any,
+            reference: newClientPayment.reference || '',
+            invoiceNo: newClientPayment.invoiceNo || '',
+            addedBy: form.createdBy,
+            notes: newClientPayment.notes || ''
+        };
+
+        const updatedPayments = [...(form.commercialDetails?.client?.payments || []), payment];
+        const totalAdvance = updatedPayments.reduce((sum, p) => sum + p.amount, 0);
+        const projectCost = form.commercialDetails?.client?.projectCost || 0;
+
+        setForm({
+            ...form,
+            commercialDetails: {
+                ...form.commercialDetails!,
+                client: {
+                    ...form.commercialDetails!.client,
+                    payments: updatedPayments,
+                    advanceReceived: totalAdvance,
+                    balanceReceivable: projectCost - totalAdvance
+                }
+            }
+        });
+
+        setNewClientPayment({
+            date: new Date().toISOString().split('T')[0],
+            mode: 'Bank',
+            amount: 0,
+            reference: '',
+            invoiceNo: '',
+            notes: ''
+        });
+    };
+
+    const handleAddVendorPayment = () => {
+        if (!newVendorPayment.amount) return;
+        const payment: VendorPayment = {
+            id: crypto.randomUUID(),
+            date: newVendorPayment.date || '',
+            amount: newVendorPayment.amount || 0,
+            mode: newVendorPayment.mode as any,
+            reference: newVendorPayment.reference || '',
+            voucherNo: newVendorPayment.voucherNo || '',
+            paidBy: form.createdBy,
+            remarks: newVendorPayment.remarks || ''
+        };
+
+        const updatedPayments = [...(form.commercialDetails?.vendor?.payments || []), payment];
+        const totalPaid = updatedPayments.reduce((sum, p) => sum + p.amount, 0);
+        const totalCost = form.commercialDetails?.vendor?.totalCost || 0;
+
+        setForm({
+            ...form,
+            commercialDetails: {
+                ...form.commercialDetails!,
+                vendor: {
+                    ...form.commercialDetails!.vendor,
+                    payments: updatedPayments,
+                    advancePaid: totalPaid,
+                    balancePayable: totalCost - totalPaid
+                }
+            }
+        });
+
+        setNewVendorPayment({
+            date: new Date().toISOString().split('T')[0],
+            mode: 'Bank',
+            amount: 0,
+            reference: '',
+            voucherNo: '',
+            remarks: ''
+        });
     };
 
     const handleSelectVendor = (vendorId: string) => {
@@ -339,7 +452,7 @@ export const ProjectDetailsView: React.FC = () => {
     );
 
     // Tab State
-    type Tab = 'overview' | 'commercial' | 'expenses' | 'income' | 'profit_loss' | 'documents' | 'activity';
+    type Tab = 'overview' | 'commercial' | 'direct_expenses' | 'extra_expenses' | 'income' | 'profit_loss' | 'documents' | 'activity';
     const [activeTab, setActiveTab] = useState<Tab>('overview');
 
     // Expense State
@@ -364,10 +477,68 @@ export const ProjectDetailsView: React.FC = () => {
     });
 
     useEffect(() => {
-        if (activeTab === 'expenses' && editingProject) {
+        if (activeTab === 'direct_expenses' && editingProject) {
             loadExpenses(editingProject.id);
         }
+        if (activeTab === 'extra_expenses' && editingProject) {
+            loadExtraExpenses(editingProject.id);
+        }
     }, [activeTab, editingProject]);
+
+    // Extra Expense State
+    const [extraExpenses, setExtraExpenses] = useState<any[]>([]);
+    const [loadingExtraExpenses, setLoadingExtraExpenses] = useState(false);
+    const [extraExpenseForm, setExtraExpenseForm] = useState({
+        date: new Date().toISOString().split('T')[0],
+        type: 'Transport',
+        amount: '',
+        mode: 'Bank' as 'Cash' | 'Bank' | 'UPI',
+        reference: '',
+        remarks: ''
+    });
+
+    const loadExtraExpenses = async (projectId: string) => {
+        setLoadingExtraExpenses(true);
+        try {
+            const data = await api.extraExpenses.fetchByProject(projectId);
+            setExtraExpenses(data);
+        } catch (error) {
+            console.error('Failed to load extra expenses', error);
+        } finally {
+            setLoadingExtraExpenses(false);
+        }
+    };
+
+    const handleSaveExtraExpense = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingProject) return;
+
+        try {
+            const newExtraExpense = {
+                projectId: editingProject.id,
+                date: extraExpenseForm.date,
+                type: extraExpenseForm.type,
+                amount: parseFloat(extraExpenseForm.amount),
+                mode: extraExpenseForm.mode,
+                reference: extraExpenseForm.reference,
+                remarks: extraExpenseForm.remarks,
+                addedBy: form.createdBy
+            };
+            const saved = await api.extraExpenses.create(newExtraExpense);
+            setExtraExpenses(prev => [saved, ...prev]);
+
+            setExtraExpenseForm({
+                date: new Date().toISOString().split('T')[0],
+                type: 'Transport',
+                amount: '',
+                mode: 'Bank',
+                reference: '',
+                remarks: ''
+            });
+        } catch (error: any) {
+            alert('Failed to save extra expense: ' + error.message);
+        }
+    };
 
     const loadExpenses = async (projectId: string) => {
         setLoadingExpenses(true);
@@ -633,6 +804,60 @@ export const ProjectDetailsView: React.FC = () => {
         dataService.exportExcel([data], `Project_Report_${editingProject.name}`, 'Overview');
     };
 
+    const handleExportClientLedgerPDF = () => {
+        if (!editingProject || !form.commercialDetails?.client?.payments) return;
+        const columns = ['Date', 'Invoice #', 'Mode', 'Amount', 'Reference', 'Added By'];
+        const rows = form.commercialDetails.client.payments.map(p => [
+            p.date,
+            p.invoiceNo || '-',
+            p.mode,
+            `₹${p.amount.toLocaleString()}`,
+            p.reference || '-',
+            p.addedBy
+        ]);
+        dataService.exportPDF(`Client_Ledger_${editingProject.name}`, columns, rows);
+    };
+
+    const handleExportVendorLedgerPDF = () => {
+        if (!editingProject || !form.commercialDetails?.vendor?.payments) return;
+        const columns = ['Date', 'Voucher #', 'Mode', 'Amount', 'Reference', 'Paid By'];
+        const rows = form.commercialDetails.vendor.payments.map(p => [
+            p.date,
+            p.voucherNo || '-',
+            p.mode,
+            `₹${p.amount.toLocaleString()}`,
+            p.reference || '-',
+            p.paidBy
+        ]);
+        dataService.exportPDF(`Vendor_Ledger_${editingProject.name}`, columns, rows);
+    };
+
+    const handleExportFullProjectLedgerExcel = () => {
+        if (!editingProject) return;
+        const clientPayments = form.commercialDetails?.client?.payments?.map(p => ({
+            Type: 'Client Receipt',
+            Date: p.date,
+            'Doc #': p.invoiceNo,
+            Amount: p.amount,
+            Mode: p.mode,
+            Reference: p.reference,
+            'By/To': p.addedBy
+        })) || [];
+
+        const vendorPayments = form.commercialDetails?.vendor?.payments?.map(p => ({
+            Type: 'Vendor Payment',
+            Date: p.date,
+            'Doc #': p.voucherNo,
+            Amount: p.amount,
+            Mode: p.mode,
+            Reference: p.reference,
+            'By/To': p.paidBy
+        })) || [];
+
+        const allPayments = [...clientPayments, ...vendorPayments].sort((a, b) => new Date(a.Date).getTime() - new Date(b.Date).getTime());
+        dataService.exportExcel(allPayments, `Full_Ledger_${editingProject.name}`, 'Transactions');
+    };
+
     const handleImportIncome = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files?.length || !editingProject) return;
         const file = e.target.files[0];
@@ -662,13 +887,14 @@ export const ProjectDetailsView: React.FC = () => {
     };
 
     // Icons for tabs
-    const TabButton = ({ id, label, icon: Icon }: { id: Tab, label: string, icon: any }) => (
+    const TabButton = ({ id, label, icon: Icon, className, tooltip }: { id: Tab, label: string, icon: any, className?: string, tooltip?: string }) => (
         <button
             onClick={() => setActiveTab(id)}
+            title={tooltip}
             className={`flex items-center space-x-3 px-4 py-3 rounded-xl w-full text-sm font-bold transition-all ${activeTab === id
                 ? 'bg-blue-50 text-blue-600 shadow-sm ring-1 ring-blue-100'
                 : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
-                }`}
+                } ${className || ''}`}
         >
             <Icon size={18} />
             <span>{label}</span>
@@ -947,7 +1173,14 @@ export const ProjectDetailsView: React.FC = () => {
                             <nav className="space-y-2 flex-1">
                                 <TabButton id="overview" label="Overview" icon={LayoutGrid} />
                                 {form.type === ProjectType.VENDOR && <TabButton id="commercial" label="Commercial Details" icon={Archive} />}
-                                <TabButton id="expenses" label="Expenses" icon={ClipboardList} />
+                                <TabButton id="direct_expenses" label="Direct Expenses" icon={ClipboardList} />
+                                <TabButton
+                                    id="extra_expenses"
+                                    label="Extra Expenses"
+                                    icon={ClipboardList}
+                                    className="text-amber-500 hover:bg-amber-50"
+                                    tooltip="These expenses are borne by company"
+                                />
                                 <TabButton id="income" label="Income" icon={CheckCircle2} />
                                 <TabButton id="profit_loss" label="Profit & Loss" icon={Archive} />
                                 <TabButton id="documents" label="Documents" icon={FileText} />
@@ -975,7 +1208,7 @@ export const ProjectDetailsView: React.FC = () => {
 
                             {/* Mobile Tabs (horizontal scroll) */}
                             <div className="md:hidden flex overflow-x-auto p-4 space-x-2 border-b border-slate-100 no-scrollbar">
-                                {['overview', 'expenses', 'income', 'profit_loss', 'documents', 'activity'].map(t => (
+                                {['overview', 'direct_expenses', 'extra_expenses', 'income', 'profit_loss', 'documents', 'activity'].map(t => (
                                     <button
                                         key={t}
                                         onClick={() => setActiveTab(t as Tab)}
@@ -1269,216 +1502,220 @@ export const ProjectDetailsView: React.FC = () => {
                                             <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full -mr-32 -mt-32 blur-3xl transition-all group-hover:bg-blue-500/10"></div>
 
                                             <div className="relative space-y-12">
-                                                {/* SECTION A: CLIENT COMMERCIAL */}
-                                                <div className="space-y-6">
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <h4 className="text-xs font-black text-blue-400 uppercase tracking-[0.2em]">🔹 A. Client Commercial (Income)</h4>
-                                                        <div className={`px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${form.commercialDetails?.marginPercent && form.commercialDetails.marginPercent > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                                                            Margin: {form.commercialDetails?.marginPercent || 0}%
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                                                        <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Project Cost (Client)</label>
-                                                            <input
-                                                                type="number"
-                                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all"
-                                                                value={form.commercialDetails?.client?.projectCost || ''}
-                                                                onChange={e => {
-                                                                    const cost = parseFloat(e.target.value) || 0;
-                                                                    const vCost = form.commercialDetails?.vendor?.totalCost || 0;
-                                                                    const margin = cost > 0 ? ((cost - vCost) / cost) * 100 : 0;
-                                                                    setForm({
-                                                                        ...form,
-                                                                        commercialDetails: {
-                                                                            ...form.commercialDetails!,
-                                                                            marginPercent: parseFloat(margin.toFixed(2)),
-                                                                            client: {
-                                                                                ...form.commercialDetails!.client,
-                                                                                projectCost: cost,
-                                                                                balanceReceivable: cost - (form.commercialDetails!.client.advanceReceived || 0)
-                                                                            }
-                                                                        }
-                                                                    });
-                                                                }}
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Advance Received</label>
-                                                            <input
-                                                                type="number"
-                                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all"
-                                                                value={form.commercialDetails?.client?.advanceReceived || ''}
-                                                                onChange={e => {
-                                                                    const adv = parseFloat(e.target.value) || 0;
-                                                                    setForm({
-                                                                        ...form,
-                                                                        commercialDetails: {
-                                                                            ...form.commercialDetails!,
-                                                                            client: {
-                                                                                ...form.commercialDetails!.client,
-                                                                                advanceReceived: adv,
-                                                                                balanceReceivable: (form.commercialDetails!.client.projectCost || 0) - adv
-                                                                            }
-                                                                        }
-                                                                    });
-                                                                }}
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-2">Balance Receivable</label>
-                                                            <div className="w-full bg-white/5 border border-white/5 rounded-xl px-4 py-3 text-sm font-black text-white/50">
-                                                                ₹{(form.commercialDetails?.client?.balanceReceivable || 0).toLocaleString()}
-                                                            </div>
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">GST (Client)</label>
-                                                            <div className="flex items-center space-x-2">
-                                                                <input
-                                                                    type="number"
-                                                                    placeholder="Amount"
-                                                                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500 transition-all"
-                                                                    value={form.commercialDetails?.client?.gstAmount || ''}
-                                                                    onChange={e => setForm({
-                                                                        ...form,
-                                                                        commercialDetails: {
-                                                                            ...form.commercialDetails!,
-                                                                            client: { ...form.commercialDetails!.client, gstAmount: parseFloat(e.target.value) || 0 }
-                                                                        }
-                                                                    })}
-                                                                />
-                                                                <select
-                                                                    className="bg-white/5 border border-white/10 rounded-xl px-2 py-3 text-[10px] font-black text-white focus:outline-none"
-                                                                    value={form.commercialDetails?.client?.gstApplicable || 'No'}
-                                                                    onChange={e => setForm({
-                                                                        ...form,
-                                                                        commercialDetails: {
-                                                                            ...form.commercialDetails!,
-                                                                            client: { ...form.commercialDetails!.client, gstApplicable: e.target.value as any }
-                                                                        }
-                                                                    })}
-                                                                >
-                                                                    <option value="Yes" className="bg-slate-900">YES</option>
-                                                                    <option value="No" className="bg-slate-900">NO</option>
-                                                                </select>
-                                                            </div>
-                                                        </div>
-                                                    </div>
+                                                {/* SUB-TABS NAVIGATION */}
+                                                <div className="flex space-x-2 p-1 bg-white/5 rounded-2xl border border-white/5 mb-8">
+                                                    {(['client', 'vendor', 'downloads'] as const).map(tab => (
+                                                        <button
+                                                            key={tab}
+                                                            type="button"
+                                                            onClick={() => setActiveCommercialTab(tab)}
+                                                            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeCommercialTab === tab
+                                                                ? 'bg-blue-600 text-white shadow-lg'
+                                                                : 'text-slate-400 hover:bg-white/5'}`}
+                                                        >
+                                                            {tab === 'client' ? 'Client Payments' : tab === 'vendor' ? 'Vendor Payments' : 'Downloads'}
+                                                        </button>
+                                                    ))}
                                                 </div>
 
-                                                {/* SECTION B: VENDOR COMMERCIAL */}
-                                                <div className="space-y-6 pt-12 border-t border-white/5">
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <h4 className="text-xs font-black text-emerald-400 uppercase tracking-[0.2em]">🔹 B. Vendor Commercial</h4>
-                                                        <div className="flex items-center space-x-2">
-                                                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Payment Terms:</p>
-                                                            <select
-                                                                className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-1 text-[10px] font-black text-emerald-400 focus:outline-none appearance-none cursor-pointer"
-                                                                value={form.commercialDetails?.vendor?.paymentTerms || 'Advance'}
-                                                                onChange={e => setForm({
-                                                                    ...form,
-                                                                    commercialDetails: {
-                                                                        ...form.commercialDetails!,
-                                                                        vendor: { ...form.commercialDetails!.vendor, paymentTerms: e.target.value as any }
-                                                                    }
-                                                                })}
-                                                            >
-                                                                <option value="Advance" className="bg-slate-900">Advance</option>
-                                                                <option value="Milestone" className="bg-slate-900">Milestone</option>
-                                                                <option value="After Delivery" className="bg-slate-900">After Delivery</option>
-                                                            </select>
+                                                {/* SUB-TAB CONTENT */}
+                                                {activeCommercialTab === 'client' && (
+                                                    <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                                                        <div className="flex items-center justify-between">
+                                                            <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest">Client Payment Ledger</h4>
+                                                            <div className="flex gap-4">
+                                                                <div className="text-right">
+                                                                    <p className="text-[8px] font-black text-slate-500 uppercase">Received</p>
+                                                                    <p className="text-sm font-black text-emerald-400">₹{(form.commercialDetails?.client?.advanceReceived || 0).toLocaleString()}</p>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <p className="text-[8px] font-black text-slate-500 uppercase">Pending</p>
+                                                                    <p className="text-sm font-black text-amber-400">₹{(form.commercialDetails?.client?.balanceReceivable || 0).toLocaleString()}</p>
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                    </div>
 
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                                                        <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vendor Total Cost</label>
-                                                            <input
-                                                                type="number"
-                                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 transition-all"
-                                                                value={form.commercialDetails?.vendor?.totalCost || ''}
-                                                                onChange={e => {
-                                                                    const cost = parseFloat(e.target.value) || 0;
-                                                                    const cCost = form.commercialDetails?.client?.projectCost || 0;
-                                                                    const margin = cCost > 0 ? ((cCost - cost) / cCost) * 100 : 0;
-                                                                    setForm({
-                                                                        ...form,
-                                                                        commercialDetails: {
-                                                                            ...form.commercialDetails!,
-                                                                            marginPercent: parseFloat(margin.toFixed(2)),
-                                                                            vendor: {
-                                                                                ...form.commercialDetails!.vendor,
-                                                                                totalCost: cost,
-                                                                                balancePayable: cost - (form.commercialDetails!.vendor.advancePaid || 0)
-                                                                            }
-                                                                        }
-                                                                    });
-                                                                }}
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vendor Advance Paid</label>
-                                                            <input
-                                                                type="number"
-                                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 transition-all"
-                                                                value={form.commercialDetails?.vendor?.advancePaid || ''}
-                                                                onChange={e => {
-                                                                    const adv = parseFloat(e.target.value) || 0;
-                                                                    setForm({
-                                                                        ...form,
-                                                                        commercialDetails: {
-                                                                            ...form.commercialDetails!,
-                                                                            vendor: {
-                                                                                ...form.commercialDetails!.vendor,
-                                                                                advancePaid: adv,
-                                                                                balancePayable: (form.commercialDetails!.vendor.totalCost || 0) - adv
-                                                                            }
-                                                                        }
-                                                                    });
-                                                                }}
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-[10px] font-black text-rose-400 uppercase tracking-widest mb-2">Vendor Balance Payable</label>
-                                                            <div className="w-full bg-white/5 border border-white/5 rounded-xl px-4 py-3 text-sm font-black text-white/50">
-                                                                ₹{(form.commercialDetails?.vendor?.balancePayable || 0).toLocaleString()}
+                                                        {/* ADD PAYMENT FORM */}
+                                                        <div className="bg-white/5 rounded-2xl p-6 border border-white/5 space-y-4">
+                                                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-2">Date</label>
+                                                                    <input type="date" className="w-full bg-slate-800 border-none rounded-lg p-2 text-xs font-bold" value={newClientPayment.date || ''} onChange={e => setNewClientPayment({ ...newClientPayment, date: e.target.value })} />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-2">Amount</label>
+                                                                    <input type="number" placeholder="₹ 0.00" className="w-full bg-slate-800 border-none rounded-lg p-2 text-xs font-bold" value={newClientPayment.amount || ''} onChange={e => setNewClientPayment({ ...newClientPayment, amount: parseFloat(e.target.value) || 0 })} />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-2">Mode</label>
+                                                                    <select className="w-full bg-slate-800 border-none rounded-lg p-2 text-xs font-bold" value={newClientPayment.mode} onChange={e => setNewClientPayment({ ...newClientPayment, mode: e.target.value as any })}>
+                                                                        <option value="Bank">Bank</option>
+                                                                        <option value="Cash">Cash</option>
+                                                                        <option value="UPI">UPI</option>
+                                                                    </select>
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-2">Invoice # (Opt)</label>
+                                                                    <input type="text" placeholder="INV-000" className="w-full bg-slate-800 border-none rounded-lg p-2 text-xs font-bold" value={newClientPayment.invoiceNo || ''} onChange={e => setNewClientPayment({ ...newClientPayment, invoiceNo: e.target.value })} />
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex gap-4 items-end">
+                                                                <div className="flex-1">
+                                                                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-2">Reference / Notes</label>
+                                                                    <input type="text" placeholder="UTR / Transaction Details..." className="w-full bg-slate-800 border-none rounded-lg p-2 text-xs font-bold" value={newClientPayment.reference || ''} onChange={e => setNewClientPayment({ ...newClientPayment, reference: e.target.value })} />
+                                                                </div>
+                                                                <button onClick={handleAddClientPayment} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest whitespace-nowrap h-[32px]">Add Payment</button>
                                                             </div>
                                                         </div>
-                                                        <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vendor GST</label>
-                                                            <div className="flex items-center space-x-2">
-                                                                <input
-                                                                    type="number"
-                                                                    placeholder="Amount"
-                                                                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 transition-all"
-                                                                    value={form.commercialDetails?.vendor?.gstAmount || ''}
-                                                                    onChange={e => setForm({
-                                                                        ...form,
-                                                                        commercialDetails: {
-                                                                            ...form.commercialDetails!,
-                                                                            vendor: { ...form.commercialDetails!.vendor, gstAmount: parseFloat(e.target.value) || 0 }
-                                                                        }
-                                                                    })}
-                                                                />
-                                                                <select
-                                                                    className="bg-white/5 border border-white/10 rounded-xl px-2 py-3 text-[10px] font-black text-white focus:outline-none"
-                                                                    value={form.commercialDetails?.vendor?.gstApplicable || 'No'}
-                                                                    onChange={e => setForm({
-                                                                        ...form,
-                                                                        commercialDetails: {
-                                                                            ...form.commercialDetails!,
-                                                                            vendor: { ...form.commercialDetails!.vendor, gstApplicable: e.target.value as any }
-                                                                        }
-                                                                    })}
-                                                                >
-                                                                    <option value="Yes" className="bg-slate-900">YES</option>
-                                                                    <option value="No" className="bg-slate-900">NO</option>
-                                                                </select>
-                                                            </div>
+
+                                                        {/* PAYMENTS TABLE */}
+                                                        <div className="overflow-hidden border border-white/5 rounded-2xl">
+                                                            <table className="w-full text-left text-xs">
+                                                                <thead className="bg-white/5 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                                                    <tr>
+                                                                        <th className="p-4">Date</th>
+                                                                        <th className="p-4">Invoice</th>
+                                                                        <th className="p-4">Amount</th>
+                                                                        <th className="p-4">Mode</th>
+                                                                        <th className="p-4">Reference</th>
+                                                                        <th className="p-4">By</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-white/5">
+                                                                    {form.commercialDetails?.client?.payments?.length ? form.commercialDetails.client.payments.map(p => (
+                                                                        <tr key={p.id} className="hover:bg-white/5 transition-colors">
+                                                                            <td className="p-4 font-bold">{p.date}</td>
+                                                                            <td className="p-4 opacity-50">{p.invoiceNo || '–'}</td>
+                                                                            <td className="p-4 font-black">₹{p.amount.toLocaleString()}</td>
+                                                                            <td className="p-4 px-2 py-1"><span className="bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded text-[8px] font-black uppercase">{p.mode}</span></td>
+                                                                            <td className="p-4 opacity-50 truncate max-w-[100px]">{p.reference}</td>
+                                                                            <td className="p-4 opacity-50">{p.addedBy}</td>
+                                                                        </tr>
+                                                                    )) : (
+                                                                        <tr><td colSpan={6} className="p-12 text-center text-slate-600 font-bold uppercase tracking-widest">No payment records found</td></tr>
+                                                                    )}
+                                                                </tbody>
+                                                            </table>
                                                         </div>
                                                     </div>
-                                                </div>
+                                                )}
+
+                                                {activeCommercialTab === 'vendor' && (
+                                                    <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                                                        <div className="flex items-center justify-between">
+                                                            <h4 className="text-xs font-black text-emerald-400 uppercase tracking-widest">Vendor Payment Ledger</h4>
+                                                            <div className="flex gap-4">
+                                                                <div className="text-right">
+                                                                    <p className="text-[8px] font-black text-slate-500 uppercase">Paid To Vendor</p>
+                                                                    <p className="text-sm font-black text-blue-400">₹{(form.commercialDetails?.vendor?.advancePaid || 0).toLocaleString()}</p>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <p className="text-[8px] font-black text-slate-500 uppercase">Payable</p>
+                                                                    <p className="text-sm font-black text-rose-400">₹{(form.commercialDetails?.vendor?.balancePayable || 0).toLocaleString()}</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* ADD VENDOR PAYMENT FORM */}
+                                                        <div className="bg-emerald-500/5 rounded-2xl p-6 border border-emerald-500/10 space-y-4">
+                                                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-emerald-500/50 uppercase mb-2">Date</label>
+                                                                    <input type="date" className="w-full bg-slate-800 border-none rounded-lg p-2 text-xs font-bold" value={newVendorPayment.date || ''} onChange={e => setNewVendorPayment({ ...newVendorPayment, date: e.target.value })} />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-emerald-500/50 uppercase mb-2">Amount</label>
+                                                                    <input type="number" placeholder="₹ 0.00" className="w-full bg-slate-800 border-none rounded-lg p-2 text-xs font-bold" value={newVendorPayment.amount || ''} onChange={e => setNewVendorPayment({ ...newVendorPayment, amount: parseFloat(e.target.value) || 0 })} />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-emerald-500/50 uppercase mb-2">Mode</label>
+                                                                    <select className="w-full bg-slate-800 border-none rounded-lg p-2 text-xs font-bold" value={newVendorPayment.mode} onChange={e => setNewVendorPayment({ ...newVendorPayment, mode: e.target.value as any })}>
+                                                                        <option value="Bank">Bank</option>
+                                                                        <option value="Cash">Cash</option>
+                                                                        <option value="UPI">UPI</option>
+                                                                    </select>
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-emerald-500/50 uppercase mb-2">Voucher #</label>
+                                                                    <input type="text" placeholder="VCH-000" className="w-full bg-slate-800 border-none rounded-lg p-2 text-xs font-bold" value={newVendorPayment.voucherNo || ''} onChange={e => setNewVendorPayment({ ...newVendorPayment, voucherNo: e.target.value })} />
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex gap-4 items-end">
+                                                                <div className="flex-1">
+                                                                    <label className="block text-[10px] font-black text-emerald-500/50 uppercase mb-2">Reference / Remarks</label>
+                                                                    <input type="text" placeholder="UTR / Bank Details..." className="w-full bg-slate-800 border-none rounded-lg p-2 text-xs font-bold" value={newVendorPayment.reference || ''} onChange={e => setNewVendorPayment({ ...newVendorPayment, reference: e.target.value })} />
+                                                                </div>
+                                                                <button onClick={handleAddVendorPayment} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest whitespace-nowrap h-[32px]">Add Vendor Payment</button>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* VENDOR PAYMENTS TABLE */}
+                                                        <div className="overflow-hidden border border-emerald-500/10 rounded-2xl">
+                                                            <table className="w-full text-left text-xs">
+                                                                <thead className="bg-emerald-500/5 text-[10px] font-black text-emerald-500/50 uppercase tracking-widest">
+                                                                    <tr>
+                                                                        <th className="p-4">Date</th>
+                                                                        <th className="p-4">Voucher</th>
+                                                                        <th className="p-4">Amount</th>
+                                                                        <th className="p-4">Mode</th>
+                                                                        <th className="p-4">Reference</th>
+                                                                        <th className="p-4">Paid By</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-emerald-500/10">
+                                                                    {form.commercialDetails?.vendor?.payments?.length ? form.commercialDetails.vendor.payments.map(p => (
+                                                                        <tr key={p.id} className="hover:bg-emerald-500/5 transition-colors">
+                                                                            <td className="p-4 font-bold">{p.date}</td>
+                                                                            <td className="p-4 opacity-50">{p.voucherNo || '–'}</td>
+                                                                            <td className="p-4 font-black">₹{p.amount.toLocaleString()}</td>
+                                                                            <td className="p-4 px-2 py-1"><span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-[8px] font-black uppercase">{p.mode}</span></td>
+                                                                            <td className="p-4 opacity-50 truncate max-w-[100px]">{p.reference}</td>
+                                                                            <td className="p-4 opacity-50">{p.paidBy}</td>
+                                                                        </tr>
+                                                                    )) : (
+                                                                        <tr><td colSpan={6} className="p-12 text-center text-slate-600 font-bold uppercase tracking-widest">No vendor payments found</td></tr>
+                                                                    )}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {activeCommercialTab === 'downloads' && (
+                                                    <div className="space-y-8 animate-in mt-12 fade-in slide-in-from-right-4 duration-300">
+                                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                            <button onClick={handleExportClientLedgerPDF} className="bg-white/5 border border-white/10 hover:bg-white/10 p-8 rounded-3xl flex flex-col items-center gap-4 group transition-all">
+                                                                <div className="w-16 h-16 bg-red-500/10 text-red-400 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                                                                    <FileDown size={32} />
+                                                                </div>
+                                                                <div className="text-center">
+                                                                    <p className="text-sm font-black text-white uppercase tracking-widest">Client Ledger</p>
+                                                                    <p className="text-[10px] text-slate-500 font-bold uppercase">Download PDF Report</p>
+                                                                </div>
+                                                            </button>
+
+                                                            <button onClick={handleExportVendorLedgerPDF} className="bg-white/5 border border-white/10 hover:bg-white/10 p-8 rounded-3xl flex flex-col items-center gap-4 group transition-all">
+                                                                <div className="w-16 h-16 bg-blue-500/10 text-blue-400 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                                                                    <FileText size={32} />
+                                                                </div>
+                                                                <div className="text-center">
+                                                                    <p className="text-sm font-black text-white uppercase tracking-widest">Vendor Ledger</p>
+                                                                    <p className="text-[10px] text-slate-500 font-bold uppercase">Download PDF Report</p>
+                                                                </div>
+                                                            </button>
+
+                                                            <button onClick={handleExportFullProjectLedgerExcel} className="bg-white/5 border border-white/10 hover:bg-white/10 p-8 rounded-3xl flex flex-col items-center gap-4 group transition-all">
+                                                                <div className="w-16 h-16 bg-emerald-500/10 text-emerald-400 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                                                                    <Download size={32} />
+                                                                </div>
+                                                                <div className="text-center">
+                                                                    <p className="text-sm font-black text-white uppercase tracking-widest">Full Project Ledger</p>
+                                                                    <p className="text-[10px] text-slate-500 font-bold uppercase">Export Excel Spreadsheet</p>
+                                                                </div>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
 
                                                 <div className="pt-8 text-center">
                                                     <button
@@ -1486,7 +1723,7 @@ export const ProjectDetailsView: React.FC = () => {
                                                         onClick={handleSubmit}
                                                         className="px-12 py-4 bg-white text-slate-900 rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-blue-50 transition-all shadow-xl active:scale-95"
                                                     >
-                                                        Save All Commercial Layers
+                                                        Save All Commercial Changes
                                                     </button>
                                                 </div>
                                             </div>
@@ -1494,7 +1731,7 @@ export const ProjectDetailsView: React.FC = () => {
                                     </div>
                                 )}
 
-                                {activeTab === 'expenses' && (
+                                {activeTab === 'direct_expenses' && (
                                     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
 
                                         {/* Expenses Header & Stats */}
@@ -1694,6 +1931,150 @@ export const ProjectDetailsView: React.FC = () => {
                                     </div>
                                 )}
 
+                                {activeTab === 'extra_expenses' && (
+                                    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+                                            <div>
+                                                <h2 className="text-2xl font-black text-amber-600">Extra Expenses</h2>
+                                                <p className="text-slate-500">Company-borne overheads (Transport, Labor, etc.)</p>
+                                            </div>
+                                            <div className="bg-amber-500 text-white px-6 py-3 rounded-xl shadow-lg shadow-amber-500/20">
+                                                <p className="text-xs font-bold text-amber-100 uppercase tracking-wider mb-1">Company Cost</p>
+                                                <p className="text-2xl font-black">
+                                                    ₹{extraExpenses.reduce((sum, e) => sum + (e.amount || 0), 0).toLocaleString()}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-6">
+                                            <h3 className="text-sm font-bold text-amber-900 uppercase tracking-wider mb-4 flex items-center">
+                                                <Plus size={16} className="mr-2 text-amber-600" /> Record Extra Expense
+                                            </h3>
+                                            <form onSubmit={handleSaveExtraExpense} className="space-y-4">
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-amber-600/60 uppercase mb-2 ml-1">Expense Date</label>
+                                                        <input
+                                                            type="date"
+                                                            required
+                                                            className="w-full bg-white border border-amber-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none"
+                                                            value={extraExpenseForm.date}
+                                                            onChange={e => setExtraExpenseForm({ ...extraExpenseForm, date: e.target.value })}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-amber-600/60 uppercase mb-2 ml-1">Expense Type</label>
+                                                        <select
+                                                            className="w-full bg-white border border-amber-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none"
+                                                            value={extraExpenseForm.type}
+                                                            onChange={e => setExtraExpenseForm({ ...extraExpenseForm, type: e.target.value })}
+                                                        >
+                                                            <option value="Transport">Transport</option>
+                                                            <option value="Labor">Labor</option>
+                                                            <option value="Packaging">Packaging</option>
+                                                            <option value="Fuel">Fuel</option>
+                                                            <option value="Food & Stay">Food & Stay</option>
+                                                            <option value="Commission">Commission</option>
+                                                            <option value="Other">Other</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-amber-600/60 uppercase mb-2 ml-1">Amount</label>
+                                                        <div className="relative">
+                                                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-400 font-bold">₹</span>
+                                                            <input
+                                                                type="number"
+                                                                required
+                                                                min="0"
+                                                                className="w-full bg-white border border-amber-100 rounded-xl pl-8 pr-4 py-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none"
+                                                                value={extraExpenseForm.amount}
+                                                                onChange={e => setExtraExpenseForm({ ...extraExpenseForm, amount: e.target.value })}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-amber-600/60 uppercase mb-2 ml-1">Payment Mode</label>
+                                                        <select
+                                                            className="w-full bg-white border border-amber-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none"
+                                                            value={extraExpenseForm.mode}
+                                                            onChange={e => setExtraExpenseForm({ ...extraExpenseForm, mode: e.target.value as any })}
+                                                        >
+                                                            <option value="Bank">Bank</option>
+                                                            <option value="Cash">Cash</option>
+                                                            <option value="UPI">UPI</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-amber-600/60 uppercase mb-2 ml-1">Reference No.</label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="UTR / ID"
+                                                            className="w-full bg-white border border-amber-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none"
+                                                            value={extraExpenseForm.reference}
+                                                            onChange={e => setExtraExpenseForm({ ...extraExpenseForm, reference: e.target.value })}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-amber-600/60 uppercase mb-2 ml-1">Remarks</label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Note"
+                                                            className="w-full bg-white border border-amber-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none"
+                                                            value={extraExpenseForm.remarks}
+                                                            onChange={e => setExtraExpenseForm({ ...extraExpenseForm, remarks: e.target.value })}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex justify-end pt-2">
+                                                    <button
+                                                        type="submit"
+                                                        className="bg-amber-600 hover:bg-amber-700 text-white px-8 py-3 rounded-xl font-bold text-sm transition-all shadow-lg shadow-amber-500/30 active:scale-95"
+                                                    >
+                                                        Add Extra Expense
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </div>
+
+                                        <div className="bg-white border border-amber-100 rounded-2xl overflow-hidden shadow-sm">
+                                            <table className="w-full text-left">
+                                                <thead className="bg-amber-50/50 border-b border-amber-100">
+                                                    <tr>
+                                                        <th className="px-6 py-4 text-xs font-black text-amber-600 uppercase tracking-widest">Date</th>
+                                                        <th className="px-6 py-4 text-xs font-black text-amber-600 uppercase tracking-widest">Type</th>
+                                                        <th className="px-6 py-4 text-xs font-black text-amber-600 uppercase tracking-widest">Amount</th>
+                                                        <th className="px-6 py-4 text-xs font-black text-amber-600 uppercase tracking-widest">Mode</th>
+                                                        <th className="px-6 py-4 text-xs font-black text-amber-600 uppercase tracking-widest">Reference</th>
+                                                        <th className="px-6 py-4 text-xs font-black text-amber-600 uppercase tracking-widest">Added By</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-amber-50">
+                                                    {loadingExtraExpenses ? (
+                                                        <tr><td colSpan={6} className="p-12 text-center text-slate-400 font-bold uppercase tracking-widest">Loading...</td></tr>
+                                                    ) : extraExpenses.length === 0 ? (
+                                                        <tr><td colSpan={6} className="p-12 text-center text-slate-300 font-black uppercase tracking-widest">No extra expenses recorded</td></tr>
+                                                    ) : (
+                                                        extraExpenses.map((e) => (
+                                                            <tr key={e.id} className="hover:bg-amber-50/30 transition-colors">
+                                                                <td className="px-6 py-4 text-sm font-bold text-slate-500">{e.date}</td>
+                                                                <td className="px-6 py-4"><span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-lg text-xs font-black uppercase">{e.type}</span></td>
+                                                                <td className="px-6 py-4 text-sm font-black text-slate-900">₹{e.amount?.toLocaleString()}</td>
+                                                                <td className="px-6 py-4"><span className="text-[10px] font-black uppercase text-slate-400">{e.mode}</span></td>
+                                                                <td className="px-6 py-4 text-xs text-slate-400 truncate max-w-[120px]">{e.reference || '–'}</td>
+                                                                <td className="px-6 py-4 text-xs font-bold text-slate-500">{e.addedBy}</td>
+                                                            </tr>
+                                                        ))
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {activeTab === 'income' && (
                                     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
 
@@ -1867,7 +2248,9 @@ export const ProjectDetailsView: React.FC = () => {
 
                                 {activeTab === 'profit_loss' && (() => {
                                     const totalIncome = incomes.reduce((sum, i) => sum + (i.amount || 0), 0);
-                                    const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+                                    const directExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+                                    const totalExtraExpenses = extraExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+                                    const totalExpenses = directExpenses + totalExtraExpenses;
                                     const netProfit = totalIncome - totalExpenses;
                                     const isProfitable = netProfit >= 0;
 
@@ -1986,8 +2369,8 @@ export const ProjectDetailsView: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                </div >
+                </div>
             )}
-        </div >
+        </div>
     );
 };
