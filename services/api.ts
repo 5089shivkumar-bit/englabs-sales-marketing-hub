@@ -393,6 +393,8 @@ export const api = {
                 invoiceNumber: i.invoice_number,
                 receivedDate: i.received_date,
                 status: i.status,
+                mode: i.mode || 'Bank',
+                linkedToCommercial: i.linked_to_commercial || false,
                 createdAt: i.created_at
             })) || [];
         },
@@ -403,7 +405,9 @@ export const api = {
                 amount: income.amount,
                 invoice_number: income.invoiceNumber,
                 received_date: income.receivedDate,
-                status: income.status
+                status: income.status,
+                mode: income.mode || 'Bank',
+                linked_to_commercial: income.linkedToCommercial || false
             }).select().single();
 
             if (error) throw error;
@@ -507,6 +511,97 @@ export const api = {
                 state: data.state,
                 createdAt: data.created_at
             };
+        }
+    },
+    documents: {
+        async fetchByProject(projectId: string): Promise<any[]> {
+            const { data, error } = await supabase
+                .from('project_documents')
+                .select('*')
+                .eq('project_id', projectId)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                if (error.code === '42P01') return []; // Table doesn't exist
+                throw error;
+            }
+
+            return data?.map((d: any) => ({
+                id: d.id,
+                projectId: d.project_id,
+                name: d.name,
+                category: d.category,
+                tags: d.tags || [],
+                fileUrl: d.file_url,
+                fileType: d.file_type,
+                size: d.size,
+                uploadedBy: d.uploaded_by,
+                createdAt: d.created_at
+            })) || [];
+        },
+        async create(doc: any): Promise<any> {
+            const { data, error } = await supabase.from('project_documents').insert({
+                project_id: doc.projectId,
+                name: doc.name,
+                category: doc.category,
+                tags: doc.tags,
+                file_url: doc.fileUrl,
+                file_type: doc.fileType,
+                size: doc.size,
+                uploaded_by: doc.uploadedBy
+            }).select().single();
+
+            if (error) throw error;
+            return {
+                id: data.id,
+                projectId: data.project_id,
+                name: data.name,
+                category: data.category,
+                tags: data.tags,
+                fileUrl: data.file_url,
+                fileType: data.file_type,
+                size: data.size,
+                uploadedBy: data.uploaded_by,
+                createdAt: data.created_at
+            };
+        },
+        async delete(id: string): Promise<void> {
+            const { error } = await supabase.from('project_documents').delete().eq('id', id);
+            if (error) throw error;
+        }
+    },
+    activity: {
+        async fetchByProject(projectId: string): Promise<any[]> {
+            const { data, error } = await supabase
+                .from('activity_logs')
+                .select('*')
+                .eq('project_id', projectId)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                if (error.code === '42P01') return [];
+                throw error;
+            }
+
+            return data?.map((l: any) => ({
+                id: l.id,
+                projectId: l.project_id,
+                type: l.type,
+                description: l.description,
+                metadata: l.metadata,
+                performedBy: l.performed_by,
+                createdAt: l.created_at
+            })) || [];
+        },
+        async create(log: any): Promise<void> {
+            const { error } = await supabase.from('activity_logs').insert({
+                project_id: log.projectId,
+                type: log.type,
+                description: log.description,
+                metadata: log.metadata || {},
+                performed_by: log.performedBy
+            });
+            if (error) throw error;
         }
     }
 };

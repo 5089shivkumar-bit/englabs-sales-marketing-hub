@@ -234,6 +234,8 @@ export interface Income {
   invoiceNumber: string;
   receivedDate: string;
   status: 'Pending' | 'Received';
+  mode: 'Cash' | 'Bank' | 'UPI';
+  linkedToCommercial?: boolean;
   createdAt?: string;
 }
 
@@ -245,7 +247,34 @@ export interface ExtraExpense {
   amount: number;
   mode: 'Cash' | 'Bank' | 'UPI';
   reference: string;
-  remarks?: string;
   addedBy: string;
+  createdAt?: string;
+}
+
+export type DocumentCategory = 'Client PO' | 'Vendor PO' | 'Vendor Invoice' | 'Client Invoice' | 'Delivery Challan' | 'Agreement / NDA' | 'Other';
+export type DocumentTag = 'Client' | 'Vendor' | 'Internal';
+
+export interface ProjectDocument {
+  id: string;
+  projectId: string;
+  name: string;
+  category: DocumentCategory;
+  tags: DocumentTag[];
+  fileUrl: string;
+  fileType?: string; // MIME type or extension
+  size?: number; // In bytes
+  uploadedBy: string;
+  createdAt?: string;
+}
+
+export type ActivityType = 'VENDOR_ASSIGNED' | 'PAYMENT_UPDATED' | 'COST_CHANGED' | 'STATUS_UPDATED' | 'DOCUMENT_ADDED' | 'PROJECT_CREATED';
+
+export interface ActivityLog {
+  id: string;
+  projectId: string;
+  type: ActivityType;
+  description: string;
+  metadata?: any;
+  performedBy: string;
   createdAt?: string;
 }

@@ -1,4 +1,5 @@
 
+
 CREATE TABLE IF NOT EXISTS project_incomes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
@@ -7,6 +8,8 @@ CREATE TABLE IF NOT EXISTS project_incomes (
     invoice_number TEXT,
     received_date DATE DEFAULT CURRENT_DATE,
     status TEXT CHECK (status IN ('Pending', 'Received')),
+    mode TEXT CHECK (mode IN ('Cash', 'Bank', 'UPI')) DEFAULT 'Bank',
+    linked_to_commercial BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     is_deleted BOOLEAN DEFAULT FALSE
 );

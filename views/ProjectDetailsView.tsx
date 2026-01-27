@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ClipboardList, Archive, FileText, CheckCircle2, User as UserIcon, Building2, Calendar, Clock, X, Plus, LayoutGrid, List as ListIcon, MoreHorizontal, Trash2, Save, Search, FileDown, FileUp, Download, Upload } from 'lucide-react';
-import { Project, ProjectStatus, ProjectType, User, Expense, Income, VendorDetails, Vendor, VendorType, CommercialDetails, ClientPayment, VendorPayment } from '../types';
+import { Project, ProjectStatus, ProjectType, User, Expense, Income, VendorDetails, Vendor, VendorType, CommercialDetails, ClientPayment, VendorPayment, ProjectDocument, DocumentCategory, DocumentTag, ActivityLog, ActivityType } from '../types';
 import { api } from '../services/api';
 import { dataService } from '../services/dataService';
 
@@ -398,6 +398,29 @@ export const ProjectDetailsView: React.FC = () => {
                 };
                 await api.projects.update(updatedProject);
                 setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
+
+                // Activity Logging
+                if (form.status !== editingProject.status) {
+                    logActivity('STATUS_UPDATED', `Project status updated from ${editingProject.status} to ${form.status}`);
+                }
+
+                const oldCost = editingProject.commercialDetails?.client?.projectCost || 0;
+                const newCost = form.commercialDetails?.client?.projectCost || 0;
+                if (oldCost !== newCost) {
+                    logActivity('COST_CHANGED', `Client Project Cost changed from ₹${oldCost} to ₹${newCost}`);
+                }
+
+                const oldClientPayments = editingProject.commercialDetails?.client?.payments || [];
+                const newClientPayments = form.commercialDetails?.client?.payments || [];
+                if (newClientPayments.length > oldClientPayments.length) {
+                    const added = newClientPayments[newClientPayments.length - 1];
+                    logActivity('PAYMENT_UPDATED', `Client Payment received: ₹${added.amount} via ${added.mode}`);
+                }
+
+                if (form.type === ProjectType.VENDOR && (!editingProject.vendorDetails || editingProject.vendorDetails.vendorId !== form.vendorDetails?.vendorId)) {
+                    logActivity('VENDOR_ASSIGNED', `Vendor assigned: ${form.vendorDetails?.vendorName}`);
+                }
+
             } else {
                 // Create
                 const newProject: Project = {
@@ -452,7 +475,7 @@ export const ProjectDetailsView: React.FC = () => {
     );
 
     // Tab State
-    type Tab = 'overview' | 'commercial' | 'direct_expenses' | 'extra_expenses' | 'income' | 'profit_loss' | 'documents' | 'activity';
+    type Tab = 'overview' | 'commercial' | 'extra_expenses' | 'income' | 'profit_loss' | 'documents' | 'activity';
     const [activeTab, setActiveTab] = useState<Tab>('overview');
 
     // Expense State
@@ -477,9 +500,6 @@ export const ProjectDetailsView: React.FC = () => {
     });
 
     useEffect(() => {
-        if (activeTab === 'direct_expenses' && editingProject) {
-            loadExpenses(editingProject.id);
-        }
         if (activeTab === 'extra_expenses' && editingProject) {
             loadExtraExpenses(editingProject.id);
         }
@@ -651,12 +671,16 @@ export const ProjectDetailsView: React.FC = () => {
         invoiceNumber: string;
         receivedDate: string;
         status: Income['status'];
+        mode: 'Cash' | 'Bank' | 'UPI';
+        linkedToCommercial: boolean;
     }>({
         clientName: '',
         amount: '',
         invoiceNumber: '',
         receivedDate: new Date().toISOString().split('T')[0],
-        status: 'Pending'
+        status: 'Pending',
+        mode: 'Bank',
+        linkedToCommercial: false
     });
 
     useEffect(() => {
@@ -696,7 +720,9 @@ export const ProjectDetailsView: React.FC = () => {
                 amount: parseFloat(incomeForm.amount),
                 invoiceNumber: incomeForm.invoiceNumber,
                 receivedDate: incomeForm.receivedDate,
-                status: incomeForm.status
+                status: incomeForm.status,
+                mode: incomeForm.mode,
+                linkedToCommercial: incomeForm.linkedToCommercial
             };
             const saved = await api.income.create(newIncome);
             setIncomes(prev => [saved, ...prev]);
@@ -704,7 +730,9 @@ export const ProjectDetailsView: React.FC = () => {
             setIncomeForm(prev => ({
                 ...prev,
                 amount: '',
-                invoiceNumber: ''
+                invoiceNumber: '',
+                mode: 'Bank',
+                linkedToCommercial: false
             }));
         } catch (error: any) {
             alert('Failed to save income: ' + error.message);
@@ -734,6 +762,128 @@ export const ProjectDetailsView: React.FC = () => {
             Amount: i.amount
         }));
         dataService.exportExcel(data, `Income_${editingProject?.name}`, 'Income');
+    };
+
+    // Documents State
+    const [documents, setDocuments] = useState<ProjectDocument[]>([]);
+    const [loadingDocuments, setLoadingDocuments] = useState(false);
+    const [showDocumentModal, setShowDocumentModal] = useState(false);
+    const [documentForm, setDocumentForm] = useState<{
+        name: string;
+        category: DocumentCategory;
+        tags: DocumentTag[];
+        fileUrl: string;
+    }>({
+        name: '',
+        category: 'Client PO',
+        tags: [],
+        fileUrl: ''
+    });
+
+    useEffect(() => {
+        if (activeTab === 'documents' && editingProject) {
+            loadDocuments(editingProject.id);
+        }
+    }, [activeTab, editingProject]);
+
+    const loadDocuments = async (projectId: string) => {
+        setLoadingDocuments(true);
+        try {
+            const data = await api.documents.fetchByProject(projectId);
+            setDocuments(data);
+        } catch (error) {
+            console.error('Failed to load documents', error);
+        } finally {
+            setLoadingDocuments(false);
+        }
+    };
+
+    const handleAddDocument = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingProject) return;
+
+        try {
+            const newDoc = {
+                projectId: editingProject.id,
+                name: documentForm.name,
+                category: documentForm.category,
+                tags: documentForm.tags,
+                fileUrl: documentForm.fileUrl || 'https://example.com/demo.pdf', // Mock URL if empty
+                uploadedBy: 'Current User' // Mock user
+            };
+            const saved = await api.documents.create(newDoc);
+            setDocuments(prev => [saved, ...prev]);
+            logActivity('DOCUMENT_ADDED', `Document uploaded: ${newDoc.name} (${newDoc.category})`);
+            setShowDocumentModal(false);
+            setDocumentForm({
+                name: '',
+                category: 'Client PO',
+                tags: [],
+                fileUrl: ''
+            });
+        } catch (error: any) {
+            alert('Failed to add document: ' + error.message);
+        }
+    };
+
+    const handleDeleteDocument = async (id: string) => {
+        if (!confirm('Are you sure you want to delete this document?')) return;
+        try {
+            await api.documents.delete(id);
+            setDocuments(prev => prev.filter(d => d.id !== id));
+        } catch (error: any) {
+            alert('Failed to delete document: ' + error.message);
+        }
+    };
+
+    const toggleDocumentTag = (tag: DocumentTag) => {
+        setDocumentForm(prev => {
+            const tags = prev.tags.includes(tag)
+                ? prev.tags.filter(t => t !== tag)
+                : [...prev.tags, tag];
+            return { ...prev, tags };
+        });
+    };
+
+    // Activity Log State
+    const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+    const [loadingLogs, setLoadingLogs] = useState(false);
+
+    useEffect(() => {
+        if (activeTab === 'activity' && editingProject) {
+            loadActivityLogs(editingProject.id);
+        }
+    }, [activeTab, editingProject]);
+
+    const loadActivityLogs = async (projectId: string) => {
+        setLoadingLogs(true);
+        try {
+            const data = await api.activity.fetchByProject(projectId);
+            setActivityLogs(data);
+        } catch (error) {
+            console.error('Failed to load activity logs', error);
+        } finally {
+            setLoadingLogs(false);
+        }
+    };
+
+    const logActivity = async (type: ActivityType, description: string, metadata: any = {}) => {
+        if (!editingProject) return;
+        try {
+            await api.activity.create({
+                projectId: editingProject.id,
+                type,
+                description,
+                metadata,
+                performedBy: 'Current User' // Mock user
+            });
+            // If viewing logs, reload
+            if (activeTab === 'activity') {
+                loadActivityLogs(editingProject.id);
+            }
+        } catch (error) {
+            console.error('Failed to create activity log', error);
+        }
     };
 
     const handleExportProjectPDF = () => {
@@ -1173,7 +1323,6 @@ export const ProjectDetailsView: React.FC = () => {
                             <nav className="space-y-2 flex-1">
                                 <TabButton id="overview" label="Overview" icon={LayoutGrid} />
                                 {form.type === ProjectType.VENDOR && <TabButton id="commercial" label="Commercial Details" icon={Archive} />}
-                                <TabButton id="direct_expenses" label="Direct Expenses" icon={ClipboardList} />
                                 <TabButton
                                     id="extra_expenses"
                                     label="Extra Expenses"
@@ -1208,7 +1357,7 @@ export const ProjectDetailsView: React.FC = () => {
 
                             {/* Mobile Tabs (horizontal scroll) */}
                             <div className="md:hidden flex overflow-x-auto p-4 space-x-2 border-b border-slate-100 no-scrollbar">
-                                {['overview', 'direct_expenses', 'extra_expenses', 'income', 'profit_loss', 'documents', 'activity'].map(t => (
+                                {['overview', 'extra_expenses', 'income', 'profit_loss', 'documents', 'activity'].map(t => (
                                     <button
                                         key={t}
                                         onClick={() => setActiveTab(t as Tab)}
@@ -2177,12 +2326,37 @@ export const ProjectDetailsView: React.FC = () => {
 
                                                     <select
                                                         className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                                        value={incomeForm.mode}
+                                                        onChange={e => setIncomeForm({ ...incomeForm, mode: e.target.value as any })}
+                                                    >
+                                                        <option value="Bank">Bank</option>
+                                                        <option value="Cash">Cash</option>
+                                                        <option value="UPI">UPI</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <select
+                                                        className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
                                                         value={incomeForm.status}
                                                         onChange={e => setIncomeForm({ ...incomeForm, status: e.target.value as any })}
                                                     >
                                                         <option value="Pending">Pending</option>
                                                         <option value="Received">Received</option>
                                                     </select>
+
+                                                    <div className="flex items-center space-x-3 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                                                        <input
+                                                            type="checkbox"
+                                                            id="linkedToCommercial"
+                                                            className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                                                            checked={incomeForm.linkedToCommercial}
+                                                            onChange={e => setIncomeForm({ ...incomeForm, linkedToCommercial: e.target.checked })}
+                                                        />
+                                                        <label htmlFor="linkedToCommercial" className="text-sm font-bold text-blue-900 cursor-pointer select-none">
+                                                            Link with Commercial Details
+                                                        </label>
+                                                    </div>
                                                 </div>
 
                                                 <div className="flex justify-end pt-2">
@@ -2204,27 +2378,43 @@ export const ProjectDetailsView: React.FC = () => {
                                                         <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Date</th>
                                                         <th className="px-6 py-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">Client</th>
                                                         <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Invoice #</th>
+                                                        <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Mode</th>
                                                         <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
                                                         <th className="px-6 py-4 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">Amount</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-100">
                                                     {loadingIncomes ? (
-                                                        <tr><td colSpan={5} className="p-8 text-center text-slate-400">Loading income records...</td></tr>
+                                                        <tr><td colSpan={6} className="p-8 text-center text-slate-400">Loading income records...</td></tr>
                                                     ) : incomes.length === 0 ? (
-                                                        <tr><td colSpan={5} className="p-8 text-center text-slate-400 font-medium">No income recorded yet.</td></tr>
+                                                        <tr><td colSpan={6} className="p-8 text-center text-slate-400 font-medium">No income recorded yet.</td></tr>
                                                     ) : (
                                                         incomes.map((income) => (
                                                             <tr key={income.id} className="hover:bg-slate-50/50 transition-colors">
                                                                 <td className="px-6 py-4 text-sm font-bold text-slate-500">
                                                                     {income.receivedDate}
                                                                 </td>
-                                                                <td className="px-6 py-4 text-sm font-bold text-slate-900">
-                                                                    {income.clientName}
+                                                                <td className="px-6 py-4">
+                                                                    <div className="flex items-center space-x-2">
+                                                                        <span className="text-sm font-bold text-slate-900">{income.clientName}</span>
+                                                                        {income.linkedToCommercial && (
+                                                                            <span className="text-[9px] px-2 py-0.5 bg-blue-100 text-blue-600 rounded-full font-black uppercase tracking-wider" title="Linked to Commercial Details">
+                                                                                Linked
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                 </td>
                                                                 <td className="px-6 py-4">
                                                                     <span className="font-mono text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
                                                                         {income.invoiceNumber || 'N/A'}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-6 py-4">
+                                                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wide ${income.mode === 'Bank' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
+                                                                        income.mode === 'Cash' ? 'bg-green-50 text-green-600 border border-green-100' :
+                                                                            'bg-purple-50 text-purple-600 border border-purple-100'
+                                                                        }`}>
+                                                                        {income.mode}
                                                                     </span>
                                                                 </td>
                                                                 <td className="px-6 py-4">
@@ -2247,12 +2437,21 @@ export const ProjectDetailsView: React.FC = () => {
                                 )}
 
                                 {activeTab === 'profit_loss' && (() => {
-                                    const totalIncome = incomes.reduce((sum, i) => sum + (i.amount || 0), 0);
-                                    const directExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+                                    // 1. Client Billing (Revenue)
+                                    const clientBilling = editingProject.commercialDetails?.client?.projectCost || 0;
+                                    // 2. Vendor Cost (Direct Cost)
+                                    const vendorCost = editingProject.commercialDetails?.vendor?.totalCost || 0;
+                                    // 3. Extra Expenses (Overheads)
                                     const totalExtraExpenses = extraExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-                                    const totalExpenses = directExpenses + totalExtraExpenses;
-                                    const netProfit = totalIncome - totalExpenses;
+
+                                    // 4. Net Profit & Stats
+                                    const netProfit = clientBilling - vendorCost - totalExtraExpenses;
+                                    const profitPercent = clientBilling > 0 ? ((netProfit / clientBilling) * 100).toFixed(2) : '0.00';
                                     const isProfitable = netProfit >= 0;
+
+                                    // Aliases for existing UI (will be replaced in next step)
+                                    const totalIncome = clientBilling;
+                                    const totalExpenses = vendorCost + totalExtraExpenses;
 
                                     return (
                                         <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -2264,78 +2463,94 @@ export const ProjectDetailsView: React.FC = () => {
                                             </div>
 
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                {/* Income Card */}
-                                                <div className="bg-green-50 border border-green-100 rounded-2xl p-6">
+                                                {/* Revenue Card (Client Billing) */}
+                                                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
                                                     <div className="flex items-center justify-between mb-4">
-                                                        <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center text-green-600">
+                                                        <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
                                                             <CheckCircle2 size={20} />
                                                         </div>
-                                                        <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded-lg">CREDIT</span>
+                                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Revenue</span>
                                                     </div>
-                                                    <p className="text-sm font-bold text-slate-500">Total Income</p>
-                                                    <p className="text-3xl font-black text-slate-900 mt-1">₹{totalIncome.toLocaleString()}</p>
+                                                    <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Client Billing</p>
+                                                    <p className="text-3xl font-black text-slate-900 mt-1">₹{clientBilling.toLocaleString()}</p>
                                                 </div>
 
-                                                {/* Expenses Card */}
-                                                <div className="bg-red-50 border border-red-100 rounded-2xl p-6">
+                                                {/* Cost Card (Vendor Cost) */}
+                                                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
                                                     <div className="flex items-center justify-between mb-4">
-                                                        <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center text-red-600">
+                                                        <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600">
                                                             <ClipboardList size={20} />
                                                         </div>
-                                                        <span className="text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded-lg">DEBIT</span>
+                                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Direct Cost</span>
                                                     </div>
-                                                    <p className="text-sm font-bold text-slate-500">Total Expenses</p>
-                                                    <p className="text-3xl font-black text-slate-900 mt-1">₹{totalExpenses.toLocaleString()}</p>
+                                                    <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Vendor Cost</p>
+                                                    <p className="text-3xl font-black text-slate-900 mt-1">₹{vendorCost.toLocaleString()}</p>
                                                 </div>
 
-                                                {/* Profit Card */}
-                                                <div className={`border rounded-2xl p-6 ${isProfitable ? 'bg-slate-900 border-slate-800' : 'bg-orange-50 border-orange-100'}`}>
+                                                {/* Overheads Card (Extra Expenses) */}
+                                                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
                                                     <div className="flex items-center justify-between mb-4">
-                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isProfitable ? 'bg-slate-800 text-white' : 'bg-orange-100 text-orange-600'}`}>
-                                                            <Building2 size={20} />
+                                                        <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600">
+                                                            <LayoutGrid size={20} />
                                                         </div>
-                                                        <span className={`text-xs font-bold px-2 py-1 rounded-lg ${isProfitable ? 'text-white bg-slate-800' : 'text-orange-600 bg-orange-100'}`}>
-                                                            NET {isProfitable ? 'PROFIT' : 'LOSS'}
-                                                        </span>
+                                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Overheads</span>
                                                     </div>
-                                                    <p className={`text-sm font-bold ${isProfitable ? 'text-slate-400' : 'text-orange-800/60'}`}>Net Profit</p>
-                                                    <p className={`text-3xl font-black mt-1 ${isProfitable ? 'text-white' : 'text-orange-900'}`}>
-                                                        ₹{Math.abs(netProfit).toLocaleString()}
-                                                    </p>
+                                                    <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Extra Expenses</p>
+                                                    <p className="text-3xl font-black text-slate-900 mt-1">₹{totalExtraExpenses.toLocaleString()}</p>
                                                 </div>
                                             </div>
 
-                                            {/* Summary Bar */}
-                                            <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
-                                                <h3 className="text-lg font-bold text-slate-900 mb-6">Financial Overview</h3>
+                                            {/* Net Profit Big Card */}
+                                            <div className={`rounded-[2.5rem] p-10 text-white relative overflow-hidden ${isProfitable ? 'bg-slate-900' : 'bg-red-900'}`}>
+                                                <div className={`absolute top-0 right-0 w-64 h-64 rounded-full -mr-32 -mt-32 blur-3xl transition-all ${isProfitable ? 'bg-blue-500/20' : 'bg-orange-500/20'}`}></div>
 
-                                                <div className="space-y-6">
-                                                    <div className="flex items-center justify-between text-sm font-bold">
-                                                        <span className="text-slate-500">Profit Margin</span>
-                                                        <span className={isProfitable ? 'text-green-600' : 'text-red-500'}>
-                                                            {totalIncome > 0 ? ((netProfit / totalIncome) * 100).toFixed(1) : 0}%
+                                                <div className="relative flex flex-col md:flex-row justify-between items-center gap-8">
+                                                    <div>
+                                                        <div className="flex items-center space-x-3 mb-2">
+                                                            <div className={`p-2 rounded-lg ${isProfitable ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                                                                <Building2 size={24} />
+                                                            </div>
+                                                            <span className="text-sm font-black uppercase tracking-[0.2em] opacity-60">Net Profitability</span>
+                                                        </div>
+                                                        <h3 className="text-6xl font-black tracking-tight mt-4">
+                                                            ₹{Math.abs(netProfit).toLocaleString()}
+                                                            <span className="text-lg font-bold opacity-40 ml-2">.00</span>
+                                                        </h3>
+                                                        <p className={`mt-2 font-bold ${isProfitable ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                            {isProfitable ? 'Project is Profitable' : 'Project is Making a Loss'}
+                                                        </p>
+                                                    </div>
+
+                                                    <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/10 min-w-[200px] text-center">
+                                                        <p className="text-xs font-black uppercase tracking-widest opacity-60 mb-2">Profit Margin</p>
+                                                        <p className={`text-4xl font-black ${isProfitable ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                            {profitPercent}%
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Detailed Breakdown Table */}
+                                            <div className="bg-slate-50 rounded-2xl p-8 border border-slate-200">
+                                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6">Financial Statement</h4>
+                                                <div className="space-y-4">
+                                                    <div className="flex justify-between items-center py-3 border-b border-slate-200">
+                                                        <span className="font-bold text-slate-700">Client Contract Value (Billing)</span>
+                                                        <span className="font-black text-emerald-600">+ ₹{clientBilling.toLocaleString()}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center py-3 border-b border-slate-200">
+                                                        <span className="font-bold text-slate-500">(-) Vendor / Purchase Cost</span>
+                                                        <span className="font-bold text-red-500">- ₹{vendorCost.toLocaleString()}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center py-3 border-b border-slate-200">
+                                                        <span className="font-bold text-slate-500">(-) Extra Expenses (Govt/Travel/Misc)</span>
+                                                        <span className="font-bold text-red-500">- ₹{totalExtraExpenses.toLocaleString()}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center pt-4">
+                                                        <span className="font-black text-lg text-slate-900 uppercase">Net Income</span>
+                                                        <span className={`font-black text-xl ${isProfitable ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                            ₹{netProfit.toLocaleString()}
                                                         </span>
-                                                    </div>
-
-                                                    {/* Progress Bar */}
-                                                    <div className="h-4 bg-slate-100 rounded-full overflow-hidden flex">
-                                                        {totalIncome > 0 && (
-                                                            <>
-                                                                <div
-                                                                    className="h-full bg-red-500"
-                                                                    style={{ width: `${Math.min((totalExpenses / totalIncome) * 100, 100)}%` }}
-                                                                />
-                                                                <div
-                                                                    className="h-full bg-green-500"
-                                                                    style={{ width: `${Math.max(((totalIncome - totalExpenses) / totalIncome) * 100, 0)}%` }}
-                                                                />
-                                                            </>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="flex justify-between items-center text-xs font-bold text-slate-400 uppercase tracking-wider">
-                                                        <div className="flex items-center"><div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>Expenses</div>
-                                                        <div className="flex items-center"><div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>Profit</div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -2344,26 +2559,223 @@ export const ProjectDetailsView: React.FC = () => {
                                 })()}
 
                                 {activeTab === 'documents' && (
-                                    <div className="flex flex-col items-center justify-center h-full text-center space-y-4 text-slate-400">
-                                        <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center">
-                                            <FileText size={40} className="text-slate-300" />
+                                    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <h2 className="text-2xl font-black text-slate-900">Project Documents</h2>
+                                                <p className="text-slate-500">Manage and organize all project-related files.</p>
+                                            </div>
+                                            <button
+                                                onClick={() => setShowDocumentModal(true)}
+                                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center shadow-lg shadow-blue-500/30 transition-all"
+                                            >
+                                                <Plus size={16} className="mr-2" />
+                                                Add Document
+                                            </button>
                                         </div>
-                                        <div>
-                                            <h3 className="text-xl font-black text-slate-900">Documents</h3>
-                                            <p className="max-w-xs mx-auto mt-2">Store and manage project files, contracts, and specs. Coming soon.</p>
-                                        </div>
+
+                                        {loadingDocuments ? (
+                                            <div className="text-center py-20 text-slate-400">Loading documents...</div>
+                                        ) : (
+                                            <div className="space-y-8">
+                                                {['Client PO', 'Vendor PO', 'Client Invoice', 'Vendor Invoice', 'Delivery Challan', 'Agreement / NDA', 'Other'].map((category) => {
+                                                    const categoryDocs = documents.filter(d => d.category === category);
+                                                    /* Show section if it has docs or if it's a primary category the user wants to see empty or not? 
+                                                       Let's show all sections to prompt usage as per "Keep separate sections" request. 
+                                                    */
+                                                    return (
+                                                        <div key={category} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                                                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center">
+                                                                <FileText size={16} className="mr-2 text-slate-400" />
+                                                                {category}
+                                                            </h3>
+                                                            {categoryDocs.length === 0 ? (
+                                                                <div className="text-center py-8 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
+                                                                    <p className="text-xs font-bold text-slate-400">No documents uploaded.</p>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                                    {categoryDocs.map(doc => (
+                                                                        <div key={doc.id} className="group relative bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/10 transition-all">
+                                                                            <div className="flex items-start justify-between mb-3">
+                                                                                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                                                                                    <FileText size={20} />
+                                                                                </div>
+                                                                                <button
+                                                                                    onClick={() => handleDeleteDocument(doc.id)}
+                                                                                    className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                                                                                >
+                                                                                    <Trash2 size={16} />
+                                                                                </button>
+                                                                            </div>
+                                                                            <h4 className="font-bold text-slate-900 text-sm mb-1 truncate" title={doc.name}>{doc.name}</h4>
+                                                                            <p className="text-xs text-slate-500 mb-3">Uploaded by {doc.uploadedBy} • {doc.createdAt ? new Date(doc.createdAt).toLocaleDateString() : 'N/A'}</p>
+
+                                                                            <div className="flex flex-wrap gap-2 mb-3">
+                                                                                {doc.tags?.map(tag => (
+                                                                                    <span key={tag} className={`text-[10px] uppercase font-black px-1.5 py-0.5 rounded border ${tag === 'Client' ? 'bg-purple-50 text-purple-600 border-purple-100' :
+                                                                                        tag === 'Vendor' ? 'bg-orange-50 text-orange-600 border-orange-100' :
+                                                                                            'bg-slate-100 text-slate-600 border-slate-200'
+                                                                                        }`}>
+                                                                                        {tag}
+                                                                                    </span>
+                                                                                ))}
+                                                                            </div>
+
+                                                                            <a
+                                                                                href={doc.fileUrl}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                className="flex items-center justify-center w-full py-2 bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-600 rounded-lg text-xs font-bold transition-colors"
+                                                                            >
+                                                                                <Download size={14} className="mr-2" />
+                                                                                Download
+                                                                            </a>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {/* Add Document Modal */}
+                                        {showDocumentModal && (
+                                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+                                                <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                                                    <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                                                        <h3 className="font-black text-lg text-slate-900">Add New Document</h3>
+                                                        <button onClick={() => setShowDocumentModal(false)} className="text-slate-400 hover:text-slate-600">
+                                                            <X size={20} />
+                                                        </button>
+                                                    </div>
+                                                    <form onSubmit={handleAddDocument} className="p-6 space-y-4">
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Document Name</label>
+                                                            <input
+                                                                type="text"
+                                                                required
+                                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                                                placeholder="e.g., Q1 Service Agreement"
+                                                                value={documentForm.name}
+                                                                onChange={e => setDocumentForm({ ...documentForm, name: e.target.value })}
+                                                            />
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Category</label>
+                                                            <select
+                                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                                                value={documentForm.category}
+                                                                onChange={e => setDocumentForm({ ...documentForm, category: e.target.value as any })}
+                                                            >
+                                                                {['Client PO', 'Vendor PO', 'Client Invoice', 'Vendor Invoice', 'Delivery Challan', 'Agreement / NDA', 'Other'].map(cat => (
+                                                                    <option key={cat} value={cat}>{cat}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Tags</label>
+                                                            <div className="flex gap-2">
+                                                                {['Client', 'Vendor', 'Internal'].map(tag => (
+                                                                    <button
+                                                                        key={tag}
+                                                                        type="button"
+                                                                        onClick={() => toggleDocumentTag(tag as any)}
+                                                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${documentForm.tags.includes(tag as any)
+                                                                            ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/30'
+                                                                            : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
+                                                                            }`}
+                                                                    >
+                                                                        {tag}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">File URL (Demo Mode)</label>
+                                                            <input
+                                                                type="text"
+                                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-mono text-slate-600 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                                                placeholder="https://..."
+                                                                value={documentForm.fileUrl}
+                                                                onChange={e => setDocumentForm({ ...documentForm, fileUrl: e.target.value })}
+                                                            />
+                                                            <p className="text-[10px] text-slate-400 mt-1">* In actual app, this would be a file upload input.</p>
+                                                        </div>
+
+                                                        <div className="pt-2">
+                                                            <button
+                                                                type="submit"
+                                                                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-blue-500/30 active:scale-95 transition-all"
+                                                            >
+                                                                Upload Document
+                                                            </button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
                                 {activeTab === 'activity' && (
-                                    <div className="flex flex-col items-center justify-center h-full text-center space-y-4 text-slate-400">
-                                        <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center">
-                                            <Clock size={40} className="text-slate-300" />
+                                    <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <h2 className="text-2xl font-black text-slate-900">Activity Log</h2>
+                                                <p className="text-slate-500">Audit trail of all project changes and updates.</p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h3 className="text-xl font-black text-slate-900">Activity Log</h3>
-                                            <p className="max-w-xs mx-auto mt-2">Audit trail of all changes and updates. Coming soon.</p>
-                                        </div>
+
+                                        {loadingLogs ? (
+                                            <div className="text-center py-20 text-slate-400">Loading activity history...</div>
+                                        ) : (
+                                            <div className="relative border-l-2 border-slate-100 ml-4 space-y-8 py-4">
+                                                {activityLogs.length === 0 ? (
+                                                    <div className="ml-8 text-slate-400 italic">No activity recorded yet.</div>
+                                                ) : (
+                                                    activityLogs.map((log) => {
+                                                        const isSystem = log.performedBy === 'System';
+                                                        return (
+                                                            <div key={log.id} className="relative ml-8 group">
+                                                                <div className={`absolute -left-[41px] top-0 w-5 h-5 rounded-full border-4 border-white ${log.type === 'STATUS_UPDATED' ? 'bg-blue-500' :
+                                                                    log.type === 'PAYMENT_UPDATED' ? 'bg-emerald-500' :
+                                                                        log.type === 'COST_CHANGED' ? 'bg-red-500' :
+                                                                            log.type === 'VENDOR_ASSIGNED' ? 'bg-purple-500' :
+                                                                                'bg-slate-400'
+                                                                    } shadow-sm group-hover:scale-110 transition-transform`}></div>
+
+                                                                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm group-hover:shadow-md transition-shadow">
+                                                                    <div className="flex justify-between items-start mb-2">
+                                                                        <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${log.type === 'STATUS_UPDATED' ? 'bg-blue-50 text-blue-600' :
+                                                                            log.type === 'PAYMENT_UPDATED' ? 'bg-emerald-50 text-emerald-600' :
+                                                                                log.type === 'COST_CHANGED' ? 'bg-red-50 text-red-600' :
+                                                                                    log.type === 'VENDOR_ASSIGNED' ? 'bg-purple-50 text-purple-600' :
+                                                                                        'bg-slate-50 text-slate-600'
+                                                                            }`}>
+                                                                            {log.type.replace('_', ' ')}
+                                                                        </span>
+                                                                        <span className="text-xs text-slate-400 font-medium">
+                                                                            {log.createdAt ? new Date(log.createdAt).toLocaleString() : 'N/A'}
+                                                                        </span>
+                                                                    </div>
+                                                                    <p className="text-sm font-bold text-slate-700">{log.description}</p>
+                                                                    <p className="text-xs text-slate-400 mt-2 flex items-center">
+                                                                        <UserIcon size={12} className="mr-1" />
+                                                                        {log.performedBy}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
