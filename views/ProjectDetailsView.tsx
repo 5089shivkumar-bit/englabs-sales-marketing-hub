@@ -1330,10 +1330,14 @@ export const ProjectDetailsView: React.FC = () => {
                                     className="text-amber-500 hover:bg-amber-50"
                                     tooltip="These expenses are borne by company"
                                 />
-                                <TabButton id="income" label="Income" icon={CheckCircle2} />
-                                <TabButton id="profit_loss" label="Profit & Loss" icon={Archive} />
-                                <TabButton id="documents" label="Documents" icon={FileText} />
-                                <TabButton id="activity" label="Activity Log" icon={Clock} />
+                                {form.type === ProjectType.VENDOR && (
+                                    <>
+                                        <TabButton id="income" label="Income" icon={CheckCircle2} />
+                                        <TabButton id="profit_loss" label="Profit & Loss" icon={Archive} />
+                                        <TabButton id="documents" label="Documents" icon={FileText} />
+                                        <TabButton id="activity" label="Activity Log" icon={Clock} />
+                                    </>
+                                )}
                             </nav>
 
                             <div className="mt-8 pt-6 border-t border-slate-200">
@@ -1357,7 +1361,7 @@ export const ProjectDetailsView: React.FC = () => {
 
                             {/* Mobile Tabs (horizontal scroll) */}
                             <div className="md:hidden flex overflow-x-auto p-4 space-x-2 border-b border-slate-100 no-scrollbar">
-                                {['overview', 'extra_expenses', 'income', 'profit_loss', 'documents', 'activity'].map(t => (
+                                {['overview', 'extra_expenses', ...(form.type === ProjectType.VENDOR ? ['income', 'profit_loss', 'documents', 'activity'] : [])].map(t => (
                                     <button
                                         key={t}
                                         onClick={() => setActiveTab(t as Tab)}
