@@ -64,6 +64,7 @@ export const ProjectDetailsView: React.FC = () => {
         createdBy: string;
         type: ProjectType;
         companyName: string;
+        location: string;
         vendorDetails?: VendorDetails;
         commercialDetails?: CommercialDetails;
     }>({
@@ -75,6 +76,7 @@ export const ProjectDetailsView: React.FC = () => {
         createdBy: 'Admin',
         type: ProjectType.IN_HOUSE,
         companyName: '',
+        location: '',
         vendorDetails: {
             vendorId: '',
             vendorName: '',
@@ -95,6 +97,7 @@ export const ProjectDetailsView: React.FC = () => {
                 gstAmount: 0,
                 gstApplicable: 'No',
                 gstNumber: '',
+                paymentTerms: 'Advance',
                 payments: []
             },
             vendor: {
@@ -151,6 +154,7 @@ export const ProjectDetailsView: React.FC = () => {
             createdBy: 'Admin',
             type: activeProjectType,
             companyName: '',
+            location: '',
             vendorDetails: {
                 vendorId: '',
                 vendorName: '',
@@ -171,6 +175,7 @@ export const ProjectDetailsView: React.FC = () => {
                     gstAmount: 0,
                     gstApplicable: 'No',
                     gstNumber: '',
+                    paymentTerms: 'Advance',
                     payments: []
                 },
                 vendor: {
@@ -200,6 +205,7 @@ export const ProjectDetailsView: React.FC = () => {
             createdBy: project.createdBy,
             type: project.type || ProjectType.IN_HOUSE,
             companyName: project.companyName,
+            location: project.location || '',
             vendorDetails: project.vendorDetails || {
                 vendorId: '',
                 vendorName: '',
@@ -230,6 +236,7 @@ export const ProjectDetailsView: React.FC = () => {
                     gstAmount: 0,
                     gstApplicable: (project.commercialDetails as any)?.gstApplicable || 'No',
                     gstNumber: (project.commercialDetails as any)?.gstNumber || '',
+                    paymentTerms: (project.commercialDetails as any)?.client?.paymentTerms || 'Advance',
                     payments: []
                 },
                 vendor: {
@@ -393,8 +400,9 @@ export const ProjectDetailsView: React.FC = () => {
                     createdBy: form.createdBy,
                     type: form.type,
                     companyName: form.companyName,
+                    location: form.location,
                     vendorDetails: form.type === ProjectType.VENDOR ? finalVendorDetails : undefined,
-                    commercialDetails: form.type === ProjectType.VENDOR ? form.commercialDetails : undefined
+                    commercialDetails: form.type === ProjectType.VENDOR || form.type === ProjectType.IN_HOUSE ? form.commercialDetails : undefined
                 };
                 await api.projects.update(updatedProject);
                 setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
@@ -433,8 +441,9 @@ export const ProjectDetailsView: React.FC = () => {
                     createdBy: form.createdBy,
                     type: form.type,
                     companyName: form.companyName,
+                    location: form.location,
                     vendorDetails: form.type === ProjectType.VENDOR ? finalVendorDetails : undefined,
-                    commercialDetails: form.type === ProjectType.VENDOR ? form.commercialDetails : undefined
+                    commercialDetails: form.type === ProjectType.VENDOR || form.type === ProjectType.IN_HOUSE ? form.commercialDetails : undefined
                 };
                 const saved = await api.projects.create(newProject);
                 setProjects(prev => [saved, ...prev]);
@@ -475,7 +484,7 @@ export const ProjectDetailsView: React.FC = () => {
     );
 
     // Tab State
-    type Tab = 'overview' | 'commercial' | 'extra_expenses' | 'income' | 'profit_loss' | 'documents' | 'activity';
+    type Tab = 'overview' | 'commercial' | 'extra_expenses' | 'income' | 'profit_loss' | 'documents' | 'activity' | 'expenses' | 'profit_loss_summary';
     const [activeTab, setActiveTab] = useState<Tab>('overview');
 
     // Expense State
@@ -486,22 +495,40 @@ export const ProjectDetailsView: React.FC = () => {
         amount: string;
         category: Expense['category'];
         date: string;
-        paidBy: string;
+        paidBy?: string;
+        paymentMode: 'Cash' | 'UPI' | 'Bank';
         status: Expense['status'];
         notes: string;
+        billPhoto?: string;
     }>({
         name: '',
         amount: '',
         category: 'Raw Material',
         date: new Date().toISOString().split('T')[0],
-        paidBy: '',
+        paymentMode: 'Cash',
         status: 'Pending',
-        notes: ''
+        notes: '',
+        billPhoto: ''
     });
+
+    const handleExpenseStatus = async (id: string, status: 'Approved' | 'Rejected', reason?: string) => {
+        try {
+            await api.expenses.updateStatus(id, status, reason);
+            setExpenses(prev => prev.map(e => e.id === id ? { ...e, status, rejectionReason: reason } : e));
+        } catch (error: any) {
+            alert('Failed to update status: ' + error.message);
+        }
+    };
 
     useEffect(() => {
         if (activeTab === 'extra_expenses' && editingProject) {
             loadExtraExpenses(editingProject.id);
+        }
+        if ((activeTab === 'expenses' || activeTab === 'profit_loss_summary') && editingProject) {
+            loadExpenses(editingProject.id);
+        }
+        if (activeTab === 'documents' && editingProject) {
+            loadDocuments(editingProject.id);
         }
     }, [activeTab, editingProject]);
 
@@ -583,20 +610,25 @@ export const ProjectDetailsView: React.FC = () => {
                 amount: parseFloat(expenseForm.amount),
                 category: expenseForm.category,
                 date: expenseForm.date,
-                paidBy: expenseForm.paidBy,
+                // paidBy: expenseForm.paidBy, // Removed from form as per new requirement
+                paymentMode: expenseForm.paymentMode,
+                billPhoto: expenseForm.billPhoto,
                 status: expenseForm.status,
                 notes: expenseForm.notes
             };
             const saved = await api.expenses.create(newExpense);
             setExpenses(prev => [saved, ...prev]);
 
-            // Reset form (keep date and paidBy for convenience?)
-            setExpenseForm(prev => ({
-                ...prev,
+            setExpenseForm({
                 name: '',
                 amount: '',
-                notes: ''
-            }));
+                category: 'Raw Material',
+                date: new Date().toISOString().split('T')[0],
+                paymentMode: 'Cash',
+                status: 'Pending',
+                notes: '',
+                billPhoto: ''
+            });
         } catch (error: any) {
             alert('Failed to save expense: ' + error.message);
         }
@@ -1322,14 +1354,20 @@ export const ProjectDetailsView: React.FC = () => {
 
                             <nav className="space-y-2 flex-1">
                                 <TabButton id="overview" label="Overview" icon={LayoutGrid} />
+                                {form.type === ProjectType.IN_HOUSE && <TabButton id="expenses" label="Expenses" icon={FileText} />}
+                                {form.type === ProjectType.IN_HOUSE && <TabButton id="commercial" label="Client Commercial" icon={Archive} />}
+                                {form.type === ProjectType.IN_HOUSE && <TabButton id="documents" label="Documents" icon={FileText} />}
+                                {form.type === ProjectType.IN_HOUSE && <TabButton id="profit_loss_summary" label="Profit & Loss" icon={LayoutGrid} />}
                                 {form.type === ProjectType.VENDOR && <TabButton id="commercial" label="Commercial Details" icon={Archive} />}
-                                <TabButton
-                                    id="extra_expenses"
-                                    label="Extra Expenses"
-                                    icon={ClipboardList}
-                                    className="text-amber-500 hover:bg-amber-50"
-                                    tooltip="These expenses are borne by company"
-                                />
+                                {form.type === ProjectType.VENDOR && (
+                                    <TabButton
+                                        id="extra_expenses"
+                                        label="Extra Expenses"
+                                        icon={ClipboardList}
+                                        className="text-amber-500 hover:bg-amber-50"
+                                        tooltip="These expenses are borne by company"
+                                    />
+                                )}
                                 {form.type === ProjectType.VENDOR && (
                                     <>
                                         <TabButton id="income" label="Income" icon={CheckCircle2} />
@@ -1359,15 +1397,14 @@ export const ProjectDetailsView: React.FC = () => {
                                 <button onClick={() => setShowModal(false)}><X size={20} className="text-slate-400" /></button>
                             </div>
 
-                            {/* Mobile Tabs (horizontal scroll) */}
                             <div className="md:hidden flex overflow-x-auto p-4 space-x-2 border-b border-slate-100 no-scrollbar">
-                                {['overview', 'extra_expenses', ...(form.type === ProjectType.VENDOR ? ['income', 'profit_loss', 'documents', 'activity'] : [])].map(t => (
+                                {['overview', ...(form.type === ProjectType.VENDOR ? ['extra_expenses'] : []), ...(form.type === ProjectType.IN_HOUSE ? ['expenses', 'commercial', 'documents', 'profit_loss_summary'] : []), ...(form.type === ProjectType.VENDOR ? ['commercial', 'income', 'profit_loss', 'documents', 'activity'] : [])].filter(Boolean).map(t => (
                                     <button
                                         key={t}
                                         onClick={() => setActiveTab(t as Tab)}
                                         className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider ${activeTab === t ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500'}`}
                                     >
-                                        {t.replace('_', ' ')}
+                                        {t.replace('_summary', '').replace('_', ' ')}
                                     </button>
                                 ))}
                             </div>
@@ -1408,6 +1445,17 @@ export const ProjectDetailsView: React.FC = () => {
                                                     placeholder="Enter project title..."
                                                     value={form.name}
                                                     onChange={e => setForm({ ...form, name: e.target.value })}
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Zone / Location</label>
+                                                <input
+                                                    type="text"
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-300"
+                                                    placeholder="e.g. North Zone / Mohali"
+                                                    value={form.location}
+                                                    onChange={e => setForm({ ...form, location: e.target.value })}
                                                 />
                                             </div>
 
@@ -1639,12 +1687,12 @@ export const ProjectDetailsView: React.FC = () => {
                                     </div>
                                 )}
 
-                                {activeTab === 'commercial' && form.type === ProjectType.VENDOR && (
+                                {activeTab === 'commercial' && (form.type === ProjectType.VENDOR || form.type === ProjectType.IN_HOUSE) && (
                                     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
                                         <div className="flex justify-between items-center">
                                             <div>
-                                                <h2 className="text-2xl font-black text-slate-900">Commercial Layers</h2>
-                                                <p className="text-slate-500 text-sm">Manage Client Billing and Vendor Expenditure.</p>
+                                                <h2 className="text-2xl font-black text-slate-900">{form.type === ProjectType.IN_HOUSE ? "Client Commercials" : "Commercial Layers"}</h2>
+                                                <p className="text-slate-500 text-sm">{form.type === ProjectType.IN_HOUSE ? "Manage Client Billing and Payments" : "Manage Client Billing and Vendor Expenditure."}</p>
                                             </div>
                                             <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
                                                 <Archive size={24} />
@@ -1655,27 +1703,144 @@ export const ProjectDetailsView: React.FC = () => {
                                             <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full -mr-32 -mt-32 blur-3xl transition-all group-hover:bg-blue-500/10"></div>
 
                                             <div className="relative space-y-12">
-                                                {/* SUB-TABS NAVIGATION */}
-                                                <div className="flex space-x-2 p-1 bg-white/5 rounded-2xl border border-white/5 mb-8">
-                                                    {(['client', 'vendor', 'downloads'] as const).map(tab => (
-                                                        <button
-                                                            key={tab}
-                                                            type="button"
-                                                            onClick={() => setActiveCommercialTab(tab)}
-                                                            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeCommercialTab === tab
-                                                                ? 'bg-blue-600 text-white shadow-lg'
-                                                                : 'text-slate-400 hover:bg-white/5'}`}
-                                                        >
-                                                            {tab === 'client' ? 'Client Payments' : tab === 'vendor' ? 'Vendor Payments' : 'Downloads'}
-                                                        </button>
-                                                    ))}
-                                                </div>
+                                                {/* SUB-TABS NAVIGATION - HIDE FOR IN_HOUSE if we only want one view or modified view */}
+                                                {form.type === ProjectType.VENDOR ? (
+                                                    <div className="flex space-x-2 p-1 bg-white/5 rounded-2xl border border-white/5 mb-8">
+                                                        {(['client', 'vendor', 'downloads'] as const).map(tab => (
+                                                            <button
+                                                                key={tab}
+                                                                type="button"
+                                                                onClick={() => setActiveCommercialTab(tab)}
+                                                                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeCommercialTab === tab
+                                                                    ? 'bg-blue-600 text-white shadow-lg'
+                                                                    : 'text-slate-400 hover:bg-white/5'}`}
+                                                            >
+                                                                {tab === 'client' ? 'Client Payments' : tab === 'vendor' ? 'Vendor Payments' : 'Downloads'}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    // IN_HOUSE Header - No sub-tabs needed if we just show client stuff, or we hardcode to client view
+                                                    <div className="mb-8 border-b border-white/10 pb-4">
+                                                        <h3 className="text-lg font-bold text-white">Client Payment Record</h3>
+                                                    </div>
+                                                )}
 
-                                                {/* SUB-TAB CONTENT */}
-                                                {activeCommercialTab === 'client' && (
+                                                {/* SUB-TAB CONTENT or IN_HOUSE CONTENT */}
+                                                {(activeCommercialTab === 'client' || form.type === ProjectType.IN_HOUSE) && (
                                                     <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-                                                        <div className="flex items-center justify-between">
+
+                                                        {/* IN_HOUSE Commercial Details Form */}
+                                                        {form.type === ProjectType.IN_HOUSE && (
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white/5 p-6 rounded-2xl border border-white/5">
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Total Project Value</label>
+                                                                    <input
+                                                                        type="number"
+                                                                        className="w-full bg-slate-800 border-none rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                                        value={form.commercialDetails?.client?.projectCost || 0}
+                                                                        onChange={e => setForm({
+                                                                            ...form,
+                                                                            commercialDetails: {
+                                                                                ...form.commercialDetails!,
+                                                                                client: { ...form.commercialDetails!.client, projectCost: parseFloat(e.target.value) || 0, balanceReceivable: (parseFloat(e.target.value) || 0) - (form.commercialDetails?.client?.advanceReceived || 0) }
+                                                                            }
+                                                                        })}
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Advance Received</label>
+                                                                    <input
+                                                                        type="number"
+                                                                        readOnly
+                                                                        className="w-full bg-slate-800/50 border-none rounded-xl px-4 py-3 text-sm font-bold text-emerald-400 focus:outline-none"
+                                                                        value={form.commercialDetails?.client?.advanceReceived || 0}
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Balance Receivable (Auto)</label>
+                                                                    <input
+                                                                        type="number"
+                                                                        readOnly
+                                                                        className="w-full bg-slate-800/50 border-none rounded-xl px-4 py-3 text-sm font-bold text-amber-400 focus:outline-none"
+                                                                        value={form.commercialDetails?.client?.balanceReceivable || 0}
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">GST Applicable</label>
+                                                                    <select
+                                                                        className="w-full bg-slate-800 border-none rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none"
+                                                                        value={form.commercialDetails?.client?.gstApplicable || 'No'}
+                                                                        onChange={e => setForm({
+                                                                            ...form,
+                                                                            commercialDetails: {
+                                                                                ...form.commercialDetails!,
+                                                                                client: { ...form.commercialDetails!.client, gstApplicable: e.target.value as 'Yes' | 'No' }
+                                                                            }
+                                                                        })}
+                                                                    >
+                                                                        <option value="Yes">Yes</option>
+                                                                        <option value="No">No</option>
+                                                                    </select>
+                                                                </div>
+                                                                {form.commercialDetails?.client?.gstApplicable === 'Yes' && (
+                                                                    <div>
+                                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">GST Number</label>
+                                                                        <input
+                                                                            type="text"
+                                                                            className="w-full bg-slate-800 border-none rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none"
+                                                                            value={form.commercialDetails?.client?.gstNumber || ''}
+                                                                            onChange={e => setForm({
+                                                                                ...form,
+                                                                                commercialDetails: {
+                                                                                    ...form.commercialDetails!,
+                                                                                    client: { ...form.commercialDetails!.client, gstNumber: e.target.value }
+                                                                                }
+                                                                            })}
+                                                                        />
+                                                                    </div>
+                                                                )}
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Payment Terms</label>
+                                                                    <select
+                                                                        className="w-full bg-slate-800 border-none rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none"
+                                                                        value={form.commercialDetails?.client?.paymentTerms || 'Advance'}
+                                                                        onChange={e => setForm({
+                                                                            ...form,
+                                                                            commercialDetails: {
+                                                                                ...form.commercialDetails!,
+                                                                                client: { ...form.commercialDetails!.client, paymentTerms: e.target.value as any }
+                                                                            }
+                                                                        })}
+                                                                    >
+                                                                        <option value="Advance">Advance</option>
+                                                                        <option value="Milestone">Milestone</option>
+                                                                        <option value="After Delivery">After Delivery</option>
+                                                                    </select>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        <div className="flex items-center justify-between mt-8">
                                                             <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest">Client Payment Ledger</h4>
+                                                            {form.type === ProjectType.IN_HOUSE && (
+                                                                <div className="flex space-x-2">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={handleExportClientLedgerPDF}
+                                                                        className="px-3 py-1.5 bg-red-500/10 text-red-400 rounded-lg text-[10px] font-bold uppercase hover:bg-red-500/20 transition-all flex items-center"
+                                                                    >
+                                                                        <FileDown size={12} className="mr-1" /> PDF
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={handleExportFullProjectLedgerExcel}
+                                                                        className="px-3 py-1.5 bg-green-500/10 text-green-400 rounded-lg text-[10px] font-bold uppercase hover:bg-green-500/20 transition-all flex items-center"
+                                                                    >
+                                                                        <Download size={12} className="mr-1" /> Excel
+                                                                    </button>
+                                                                </div>
+                                                            )}
                                                             <div className="flex gap-4">
                                                                 <div className="text-right">
                                                                     <p className="text-[8px] font-black text-slate-500 uppercase">Received</p>
@@ -2675,7 +2840,10 @@ export const ProjectDetailsView: React.FC = () => {
                                                                 value={documentForm.category}
                                                                 onChange={e => setDocumentForm({ ...documentForm, category: e.target.value as any })}
                                                             >
-                                                                {['Client PO', 'Vendor PO', 'Client Invoice', 'Vendor Invoice', 'Delivery Challan', 'Agreement / NDA', 'Other'].map(cat => (
+                                                                {(form.type === ProjectType.IN_HOUSE
+                                                                    ? ['Drawings / Designs', 'Client PO', 'Client Invoice', 'Quality Reports', 'Other']
+                                                                    : ['Client PO', 'Vendor PO', 'Client Invoice', 'Vendor Invoice', 'Delivery Challan', 'Agreement / NDA', 'Other']
+                                                                ).map(cat => (
                                                                     <option key={cat} value={cat}>{cat}</option>
                                                                 ))}
                                                             </select>
@@ -2724,6 +2892,350 @@ export const ProjectDetailsView: React.FC = () => {
                                                 </div>
                                             </div>
                                         )}
+                                    </div>
+                                )}
+
+                                {activeTab === 'expenses' && (
+                                    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <h2 className="text-2xl font-black text-slate-900">Project Expenses</h2>
+                                                <p className="text-slate-500">Track and manage project-related expenditures.</p>
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    setExpenseForm({
+                                                        name: '',
+                                                        amount: '',
+                                                        category: 'Raw Material',
+                                                        date: new Date().toISOString().split('T')[0],
+                                                        paymentMode: 'Cash',
+                                                        status: 'Pending',
+                                                        notes: '',
+                                                        billPhoto: ''
+                                                    });
+                                                }}
+                                                className="md:hidden flex items-center px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold"
+                                            >
+                                                <Plus size={14} className="mr-2" /> Add
+                                            </button>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                            {/* Left Column: Add Expense Form */}
+                                            <div className="lg:col-span-1 space-y-6">
+                                                <div className="bg-slate-50 border border-slate-200 rounded-[2rem] p-6 sticky top-6">
+                                                    <h3 className="text-lg font-black text-slate-900 mb-6 flex items-center">
+                                                        <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center mr-3">
+                                                            <Plus size={18} />
+                                                        </span>
+                                                        Add Expense
+                                                    </h3>
+
+                                                    <form onSubmit={handleSaveExpense} className="space-y-4">
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Expense Type</label>
+                                                            <select
+                                                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all appearance-none cursor-pointer"
+                                                                value={expenseForm.category}
+                                                                onChange={e => setExpenseForm({ ...expenseForm, category: e.target.value as any })}
+                                                            >
+                                                                <option value="Raw Material">Raw Material</option>
+                                                                <option value="Labor">Labor</option>
+                                                                <option value="Machine/Maintenance">Machine/Maintenance</option>
+                                                                <option value="Power/Utility">Power/Utility</option>
+                                                                <option value="Other">Other</option>
+                                                            </select>
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Title (Optional)</label>
+                                                            <input
+                                                                type="text"
+                                                                placeholder="e.g. Steel rod purchase"
+                                                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:outline-none focus:border-blue-500 transition-all placeholder:text-slate-300"
+                                                                value={expenseForm.name}
+                                                                onChange={e => setExpenseForm({ ...expenseForm, name: e.target.value })}
+                                                            />
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Amount (₹)</label>
+                                                            <div className="relative">
+                                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
+                                                                <input
+                                                                    type="number"
+                                                                    required
+                                                                    placeholder="0.00"
+                                                                    className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-4 py-3 text-sm font-bold text-slate-900 focus:outline-none focus:border-blue-500 transition-all placeholder:text-slate-300"
+                                                                    value={expenseForm.amount}
+                                                                    onChange={e => setExpenseForm({ ...expenseForm, amount: e.target.value })}
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Date</label>
+                                                            <input
+                                                                type="date"
+                                                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:outline-none focus:border-blue-500 transition-all"
+                                                                value={expenseForm.date}
+                                                                onChange={e => setExpenseForm({ ...expenseForm, date: e.target.value })}
+                                                            />
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Payment Mode</label>
+                                                            <div className="grid grid-cols-3 gap-2">
+                                                                {['Cash', 'UPI', 'Bank'].map(mode => (
+                                                                    <button
+                                                                        key={mode}
+                                                                        type="button"
+                                                                        onClick={() => setExpenseForm({ ...expenseForm, paymentMode: mode as any })}
+                                                                        className={`px-2 py-3 rounded-xl text-xs font-bold transition-all border ${expenseForm.paymentMode === mode
+                                                                            ? 'bg-blue-50 text-blue-600 border-blue-200'
+                                                                            : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                                                                            }`}
+                                                                    >
+                                                                        {mode}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Bill Photo (Optional)</label>
+                                                            <div className="relative">
+                                                                <input
+                                                                    type="file"
+                                                                    accept="image/*"
+                                                                    className="hidden"
+                                                                    id="bill-upload"
+                                                                    onChange={e => {
+                                                                        const file = e.target.files?.[0];
+                                                                        if (file) {
+                                                                            setExpenseForm({ ...expenseForm, billPhoto: URL.createObjectURL(file) });
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <label
+                                                                    htmlFor="bill-upload"
+                                                                    className="flex items-center justify-center w-full bg-white border-2 border-dashed border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-500 hover:text-blue-500 hover:border-blue-200 hover:bg-blue-50 transition-all cursor-pointer"
+                                                                >
+                                                                    <Upload size={16} className="mr-2" />
+                                                                    {expenseForm.billPhoto ? 'Change Photo' : 'Upload / Camera'}
+                                                                </label>
+                                                                {expenseForm.billPhoto && (
+                                                                    <div className="mt-2 text-xs font-bold text-green-600 flex items-center">
+                                                                        <CheckCircle2 size={12} className="mr-1" /> Photo selected
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Notes (Optional)</label>
+                                                            <textarea
+                                                                placeholder="Max 1-2 lines..."
+                                                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:outline-none focus:border-blue-500 transition-all placeholder:text-slate-300 resize-none h-20"
+                                                                value={expenseForm.notes}
+                                                                onChange={e => setExpenseForm({ ...expenseForm, notes: e.target.value })}
+                                                            />
+                                                        </div>
+
+                                                        <button
+                                                            type="submit"
+                                                            disabled={!expenseForm.amount}
+                                                            className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-lg shadow-slate-500/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        >
+                                                            Submit Expense
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </div>
+
+                                            {/* Right Column: Expenses List */}
+                                            <div className="lg:col-span-2">
+                                                <h3 className="text-lg font-black text-slate-900 mb-6">Recent Expenses</h3>
+
+                                                {loadingExpenses ? (
+                                                    <div className="text-center p-12 text-slate-400 font-medium">Loading expenses...</div>
+                                                ) : expenses.length === 0 ? (
+                                                    <div className="text-center p-12 border-2 border-dashed border-slate-200 rounded-[2rem] bg-slate-50">
+                                                        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-slate-300">
+                                                            <FileText size={24} />
+                                                        </div>
+                                                        <p className="text-slate-400 font-bold text-sm">No expenses recorded yet.</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-4">
+                                                        {expenses.map(expense => (
+                                                            <div
+                                                                key={expense.id}
+                                                                className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group"
+                                                                onClick={() => {
+                                                                    // Toggle verify/reject view logic could act here
+                                                                }}
+                                                            >
+                                                                <div className="flex justify-between items-start mb-3">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg
+                                                                            ${expense.category === 'Raw Material' ? 'bg-blue-50 text-blue-600' :
+                                                                                expense.category === 'Labor' ? 'bg-purple-50 text-purple-600' :
+                                                                                    'bg-slate-50 text-slate-600'}
+                                                                        `}>
+                                                                            {expense.category.charAt(0)}
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="font-black text-slate-900">{expense.category}</p>
+                                                                            <p className="text-xs text-slate-400 font-bold">{expense.date} • {expense.paymentMode}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="text-right">
+                                                                        <p className="font-black text-slate-900 text-lg">₹{expense.amount}</p>
+                                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider
+                                                                            ${expense.status === 'Approved' ? 'bg-green-50 text-green-600' :
+                                                                                expense.status === 'Rejected' ? 'bg-red-50 text-red-600' :
+                                                                                    'bg-amber-50 text-amber-600'}
+                                                                        `}>
+                                                                            {expense.status}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+
+                                                                {expense.name && (
+                                                                    <p className="text-sm text-slate-600 font-medium bg-slate-50 p-3 rounded-xl mb-3">
+                                                                        {expense.name}
+                                                                    </p>
+                                                                )}
+
+                                                                {/* Expandable Details Area */}
+                                                                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                                                                    <div className="flex items-center gap-2">
+                                                                        {expense.billPhoto && (
+                                                                            <a href={expense.billPhoto} target="_blank" rel="noreferrer" className="text-xs font-bold text-blue-500 hover:underline flex items-center" onClick={e => e.stopPropagation()}>
+                                                                                <FileText size={12} className="mr-1" /> View Bill
+                                                                            </a>
+                                                                        )}
+                                                                        {expense.notes && !expense.name && (
+                                                                            <span className="text-xs text-slate-400 truncate max-w-[200px]">{expense.notes}</span>
+                                                                        )}
+                                                                    </div>
+
+                                                                    {/* Approval Actions */}
+                                                                    {expense.status === 'Pending' && (
+                                                                        <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                                                                            <button
+                                                                                onClick={() => handleExpenseStatus(expense.id, 'Approved')}
+                                                                                className="p-2 hover:bg-green-50 text-slate-400 hover:text-green-600 rounded-lg transition-colors"
+                                                                                title="Approve"
+                                                                            >
+                                                                                <CheckCircle2 size={18} />
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    const reason = prompt("Enter rejection reason:");
+                                                                                    if (reason) handleExpenseStatus(expense.id, 'Rejected', reason);
+                                                                                }}
+                                                                                className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg transition-colors"
+                                                                                title="Reject"
+                                                                            >
+                                                                                <X size={18} />
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                {expense.status === 'Rejected' && expense.rejectionReason && (
+                                                                    <div className="mt-3 bg-red-50 p-3 rounded-xl text-xs text-red-600 font-medium">
+                                                                        <strong>Rejected:</strong> {expense.rejectionReason}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === 'profit_loss_summary' && (
+                                    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <h2 className="text-2xl font-black text-slate-900">Profit & Loss</h2>
+                                                <p className="text-slate-500">Real-time financial summary for this project.</p>
+                                            </div>
+                                        </div>
+
+                                        {(() => {
+                                            // Calculate P&L
+
+                                            // 1. Income (Client Project Value)
+                                            // Ensure we are using the 'projectCost' which is 'Total Project Value' in the form
+                                            const totalIncome = form.commercialDetails?.client?.projectCost || 0;
+
+                                            // 2. Expenses (Sum of specific In-House Expenses)
+                                            // Note: 'expenses' state comes from 'loadExpenses'. 
+                                            // We need to ensure expenses are loaded. They are loaded in 'useEffect' when opening 'expenses' tab.
+                                            // We should probably ensure they are loaded when entering this tab too. 
+                                            // (Added logic in useEffect below separately or rely on user having visited expenses tab? Better to load.)
+                                            const totalExpenses = expenses.reduce((sum, e) => sum + (e.status !== 'Rejected' ? e.amount : 0), 0);
+
+                                            const netProfit = totalIncome - totalExpenses;
+                                            const isProfit = netProfit >= 0;
+
+                                            return (
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                    {/* Income Card */}
+                                                    <div className="bg-emerald-50 border border-emerald-100 rounded-[2rem] p-8 relative overflow-hidden group">
+                                                        <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+                                                            <CheckCircle2 size={120} className="text-emerald-600" />
+                                                        </div>
+                                                        <p className="text-sm font-bold text-emerald-600 uppercase tracking-widest mb-2">Total Income</p>
+                                                        <h3 className="text-4xl font-black text-emerald-900">
+                                                            ₹{totalIncome.toLocaleString()}
+                                                        </h3>
+                                                        <p className="text-xs font-medium text-emerald-600/80 mt-2">
+                                                            Based on Project Value
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Expense Card */}
+                                                    <div className="bg-red-50 border border-red-100 rounded-[2rem] p-8 relative overflow-hidden group">
+                                                        <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+                                                            <FileText size={120} className="text-red-600" />
+                                                        </div>
+                                                        <p className="text-sm font-bold text-red-600 uppercase tracking-widest mb-2">Total Expenses</p>
+                                                        <h3 className="text-4xl font-black text-red-900">
+                                                            ₹{totalExpenses.toLocaleString()}
+                                                        </h3>
+                                                        <p className="text-xs font-medium text-red-600/80 mt-2">
+                                                            Approved & Pending Expenses
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Net Result Card */}
+                                                    <div className={`border rounded-[2rem] p-8 relative overflow-hidden group ${isProfit
+                                                        ? 'bg-slate-900 border-slate-800 text-white'
+                                                        : 'bg-orange-50 border-orange-100 text-orange-900'
+                                                        }`}>
+                                                        <p className={`text-sm font-bold uppercase tracking-widest mb-2 ${isProfit ? 'text-slate-400' : 'text-orange-600'
+                                                            }`}>
+                                                            {isProfit ? 'Net Profit' : 'Net Loss'}
+                                                        </p>
+                                                        <h3 className={`text-4xl font-black ${isProfit ? 'text-white' : 'text-orange-900'
+                                                            }`}>
+                                                            {isProfit ? '+' : ''}₹{netProfit.toLocaleString()}
+                                                        </h3>
+                                                        <p className={`text-xs font-medium mt-2 ${isProfit ? 'text-slate-500' : 'text-orange-600/80'
+                                                            }`}>
+                                                            Margin: {totalIncome > 0 ? ((netProfit / totalIncome) * 100).toFixed(1) : 0}%
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 )}
 

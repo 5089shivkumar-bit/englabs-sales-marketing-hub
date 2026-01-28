@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { Customer, Expo, Visit, TechCategory, PricingRecord, ContactPerson, Project, Vendor, VendorType, ProjectType } from '../types';
+import { Customer, Expo, Visit, TechCategory, PricingRecord, ContactPerson, Project, Vendor, VendorType, ProjectType, Expense } from '../types';
 import { INDIA_GEO_DATA } from '../constants';
 
 // --- CUSTOMERS ---
@@ -233,7 +233,8 @@ export const api = {
                     type: p.project_type || ProjectType.IN_HOUSE,
                     vendorDetails: p.vendor_details,
                     commercialDetails: p.commercial_details,
-                    updatedAt: p.updated_at
+                    updatedAt: p.updated_at,
+                    location: p.location
                 }));
             } catch (err: any) {
                 console.error('Fetch Projects failed:', err);
@@ -253,7 +254,8 @@ export const api = {
                     project_type: project.type,
                     vendor_details: project.vendorDetails,
                     commercial_details: project.commercialDetails,
-                    updated_at: new Date().toISOString()
+                    updated_at: new Date().toISOString(),
+                    location: project.location
                 }).select().single();
 
                 if (error) {
@@ -294,7 +296,8 @@ export const api = {
                     project_type: project.type,
                     vendor_details: project.vendorDetails,
                     commercial_details: project.commercialDetails,
-                    updated_at: new Date().toISOString()
+                    updated_at: new Date().toISOString(),
+                    location: project.location
                 }).eq('id', project.id);
 
                 if (error) {
@@ -335,7 +338,7 @@ export const api = {
         }
     },
     expenses: {
-        async fetchByProject(projectId: string): Promise<any[]> {
+        async fetchByProject(projectId: string): Promise<Expense[]> {
             const { data, error } = await supabase
                 .from('project_expenses')
                 .select('*')
@@ -351,12 +354,15 @@ export const api = {
                 category: e.category,
                 date: e.date,
                 paidBy: e.paid_by,
+                paymentMode: e.payment_mode,
+                billPhoto: e.bill_photo,
                 status: e.status,
+                rejectionReason: e.rejection_reason,
                 notes: e.notes,
                 createdAt: e.created_at
             })) || [];
         },
-        async create(expense: any): Promise<any> {
+        async create(expense: Partial<Expense>): Promise<Expense> {
             const { data, error } = await supabase.from('project_expenses').insert({
                 project_id: expense.projectId,
                 name: expense.name,
@@ -364,12 +370,38 @@ export const api = {
                 category: expense.category,
                 date: expense.date,
                 paid_by: expense.paidBy,
+                payment_mode: expense.paymentMode,
+                bill_photo: expense.billPhoto,
                 status: expense.status,
                 notes: expense.notes
             }).select().single();
 
             if (error) throw error;
-            return { ...expense, id: data.id };
+            return {
+                id: data.id,
+                projectId: data.project_id,
+                name: data.name,
+                amount: data.amount,
+                category: data.category,
+                date: data.date,
+                paidBy: data.paid_by,
+                paymentMode: data.payment_mode,
+                billPhoto: data.bill_photo,
+                status: data.status,
+                rejectionReason: data.rejection_reason,
+                notes: data.notes,
+                createdAt: data.created_at
+            };
+        },
+        async updateStatus(id: string, status: 'Approved' | 'Rejected', reason?: string): Promise<void> {
+            const { error } = await supabase
+                .from('project_expenses')
+                .update({
+                    status,
+                    rejection_reason: reason
+                })
+                .eq('id', id);
+            if (error) throw error;
         },
         async delete(id: string): Promise<void> {
             const { error } = await supabase.from('project_expenses').delete().eq('id', id);

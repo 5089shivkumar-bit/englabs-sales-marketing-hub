@@ -153,6 +153,7 @@ export interface ClientCommercial {
   gstAmount: number;
   gstApplicable: 'Yes' | 'No';
   gstNumber?: string;
+  paymentTerms?: PaymentTerms;
   payments?: ClientPayment[];
 }
 
@@ -208,6 +209,7 @@ export interface Project {
   status: ProjectStatus;
   createdBy: string;
   companyName: string;
+  location?: string;
   vendorDetails?: VendorDetails;
   commercialDetails?: CommercialDetails;
   updatedAt?: string;
@@ -218,10 +220,13 @@ export interface Expense {
   projectId: string;
   name: string;
   amount: number;
-  category: 'Raw Material' | 'Machining/Production' | 'Labor' | 'Packaging & Transport' | 'Overheads' | 'Other';
+  category: 'Raw Material' | 'Labor' | 'Machine/Maintenance' | 'Power/Utility' | 'Other';
   date: string;
-  paidBy: string;
+  paidBy?: string; // Optional now as per new flow might not use it or auto-set
+  paymentMode: 'Cash' | 'UPI' | 'Bank';
+  billPhoto?: string;
   status: 'Pending' | 'Approved' | 'Rejected';
+  rejectionReason?: string;
   notes?: string;
   createdAt?: string;
 }
