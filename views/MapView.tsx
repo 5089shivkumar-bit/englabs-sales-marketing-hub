@@ -44,6 +44,7 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
   const [filterSize, setFilterSize] = useState('All');
   const [filterRadius, setFilterRadius] = useState('Global');
   const [discoveryMode, setDiscoveryMode] = useState(false);
+  const [showDensity, setShowDensity] = useState(true);
   const [activeAlert, setActiveAlert] = useState<{ title: string, msg: string } | null>(null);
 
   // Constants for Filters
@@ -268,6 +269,83 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
     }
   }, [selectedState, selectedCity, selectedHub, filterRadius, currentCenter]);
 
+  // Calculate Densities
+  const stateDensities = useMemo(() => {
+    const counts: Record<string, number> = {};
+    customers.forEach(c => {
+      if (c.state) {
+        counts[c.state] = (counts[c.state] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [customers]);
+
+  const densityLayer = useRef<L.LayerGroup | null>(null);
+
+  useEffect(() => {
+    if (!leafletMap.current) return;
+
+    if (!densityLayer.current) {
+      densityLayer.current = L.layerGroup().addTo(leafletMap.current);
+    } else {
+      densityLayer.current.clearLayers();
+    }
+
+    if (!showDensity) return;
+
+    Object.entries(INDIA_GEO_DATA).forEach(([stateName, data]) => {
+      const count = stateDensities[stateName] || 0;
+
+      // Color Logic: 
+      // 🟢 Green: More clients (> 10) - Strong Area
+      // 🟡 Yellow: Normal clients (3-10) - Stable Area
+      // 🔴 Red: Very few clients (1-2) - Weak Area
+      // ⚪ Grey: No clients (0) - Opportunity Area
+
+      let color = '#94a3b8'; // Grey-400 (Default/Zero)
+      let radius = 70000; // 70km base
+      let label = 'Opportunity Area';
+
+      if (count >= 10) {
+        color = '#10b981'; // Emerald-500
+        radius = 120000;
+        label = 'Strong Area';
+      } else if (count >= 3) {
+        color = '#eab308'; // Yellow-500
+        radius = 100000;
+        label = 'Stable Area';
+      } else if (count > 0) {
+        color = '#ef4444'; // Red-500
+        radius = 80000;
+        label = 'Weak Area';
+      }
+
+      // Draw Circle
+      if (data.coords) {
+        // For Opportunity areas (0 clients), we might want slightly less opacity or just a ring?
+        // User said "Areas... should be visible by color... Grey: No clients"
+        // sticking to filled circle for consistency
+
+        L.circle(data.coords, {
+          color: color,
+          fillColor: color,
+          fillOpacity: count === 0 ? 0.1 : 0.2,
+          weight: count === 0 ? 1 : 0, // Add slight border for grey areas to make them distinct but subtle
+          radius: radius
+        }).bindPopup(`
+                <div class="text-center">
+                    <div class="text-xs font-black uppercase text-slate-500 mb-1">${stateName}</div>
+                    <div class="text-lg font-black" style="color: ${color}">${count} Clients</div>
+                    <div class="text-[9px] font-bold uppercase tracking-widest text-slate-400">
+                        ${label}
+                    </div>
+                </div>
+            `).addTo(densityLayer.current!);
+      }
+    });
+
+  }, [stateDensities, showDensity, customers]);
+
   // Marker Update Logic
   useEffect(() => {
     if (!markersLayer.current || !leafletMap.current) return;
@@ -352,6 +430,14 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
           <p className="text-slate-500 text-sm">Targeted cluster analysis for Mechanical & Tooling sectors.</p>
         </div>
         <div className="flex items-center space-x-3">
+          <button
+            onClick={() => setShowDensity(!showDensity)}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm border ${showDensity ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+          >
+            <Target size={14} />
+            <span>Density Map</span>
+          </button>
+
           <button
             onClick={() => setDiscoveryMode(!discoveryMode)}
             className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm border ${discoveryMode ? 'bg-amber-500 text-white border-amber-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}

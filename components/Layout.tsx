@@ -31,18 +31,20 @@ interface SidebarItemProps {
   label: string;
   active: boolean;
   onClick: () => void;
+  collapsed?: boolean;
 }
 
-const SidebarItem: React.FC<SidebarItemProps> = ({ icon: Icon, label, active, onClick }) => (
+const SidebarItem: React.FC<SidebarItemProps> = ({ icon: Icon, label, active, onClick, collapsed }) => (
   <button
     onClick={onClick}
-    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${active
+    title={collapsed ? label : undefined}
+    className={`w-full flex items-center transition-all duration-300 ${collapsed ? 'justify-center p-3' : 'space-x-3 px-4 py-3'} rounded-lg ${active
       ? 'bg-blue-600 text-white shadow-md'
       : 'text-slate-400 hover:bg-slate-800 hover:text-white'
       }`}
   >
-    <Icon size={20} />
-    <span className="font-medium">{label}</span>
+    <Icon size={20} className="flex-shrink-0" />
+    <span className={`font-medium whitespace-nowrap overflow-hidden transition-all duration-300 ${collapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100'}`}>{label}</span>
   </button>
 );
 
@@ -56,6 +58,7 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, user, onUserChange }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [currentTime, setCurrentTime] = useState(dateUtils.formatISTTime());
 
@@ -113,19 +116,30 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
       )}
 
       <aside className={`
-        fixed lg:static inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white transform transition-transform duration-300 ease-in-out
+        fixed lg:static inset-y-0 left-0 z-50 bg-slate-900 text-white transform transition-all duration-300 ease-in-out
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        ${isCollapsed ? 'lg:w-20' : 'lg:w-64'}
       `}>
-        <div className="h-full flex flex-col p-6">
-          <div className="flex items-center space-x-3 mb-10">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg shadow-blue-500/20">M</div>
-            <div>
-              <h1 className="text-lg font-bold leading-none">Mark-Eng</h1>
-              <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest">Enterprise</p>
+        <div className="h-full flex flex-col p-4 relative">
+          {/* Toggle Button */}
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="hidden lg:flex absolute -right-3 top-10 bg-blue-600 rounded-full p-1 text-white shadow-lg border-2 border-slate-900 hover:bg-blue-700 transition-colors z-50"
+          >
+            <div className={`transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`}>
+              <ChevronDown size={14} className="rotate-90" />
+            </div>
+          </button>
+
+          <div className={`flex items-center mb-10 transition-all duration-300 ${isCollapsed ? 'justify-center' : 'space-x-3'}`}>
+            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg shadow-blue-500/20 flex-shrink-0">M</div>
+            <div className={`overflow-hidden transition-all duration-300 ${isCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100'}`}>
+              <h1 className="text-lg font-bold leading-none whitespace-nowrap">Mark-Eng</h1>
+              <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest whitespace-nowrap">Enterprise</p>
             </div>
           </div>
 
-          <nav className="flex-1 space-y-1 overflow-y-auto custom-scrollbar pr-1">
+          <nav className="flex-1 space-y-2 overflow-y-auto custom-scrollbar pr-1">
             {navItems.map((item) => (
               <SidebarItem
                 key={item.id}
@@ -136,18 +150,31 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                   setActiveTab(item.id);
                   setIsSidebarOpen(false);
                 }}
+                collapsed={isCollapsed}
               />
             ))}
           </nav>
 
           <div className="pt-6 mt-6 border-t border-slate-800">
-            <div className="px-4 py-3 bg-slate-800/50 rounded-xl mb-4">
-              <p className="text-xs text-slate-500 uppercase font-bold tracking-tight mb-1">System Control</p>
-              <div className="flex items-center text-blue-400 text-xs font-bold">
-                <UserCheck size={12} className="mr-1.5" /> Registry Verified
-              </div>
+            <div className={`bg-slate-800/50 rounded-xl mb-4 transition-all duration-300 ${isCollapsed ? 'p-2 flex justify-center' : 'px-4 py-3'}`}>
+              {isCollapsed ? (
+                <UserCheck size={16} className="text-blue-400" />
+              ) : (
+                <>
+                  <p className="text-xs text-slate-500 uppercase font-bold tracking-tight mb-1">System Control</p>
+                  <div className="flex items-center text-blue-400 text-xs font-bold">
+                    <UserCheck size={12} className="mr-1.5" /> Registry Verified
+                  </div>
+                </>
+              )}
             </div>
-            <SidebarItem icon={LogOut} label="Sign Out" active={false} onClick={() => { }} />
+            <SidebarItem
+              icon={LogOut}
+              label="Sign Out"
+              active={false}
+              onClick={() => { }}
+              collapsed={isCollapsed}
+            />
           </div>
         </div>
       </aside>

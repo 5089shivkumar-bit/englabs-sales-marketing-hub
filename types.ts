@@ -39,13 +39,59 @@ export interface ContactPerson {
   phone: string;
 }
 
+export enum PricingStatus {
+  DRAFT = "Draft",
+  SENT_TO_CLIENT = "Sent to Client",
+  APPROVED = "Approved",
+  REJECTED = "Rejected",
+  REVISED = "Revised"
+}
+
 export interface PricingRecord {
   id: string;
   customerId: string;
-  tech: TechCategory;
-  rate: number;
-  unit: string;
+
+  // Basic Details
+  salesPerson?: string;
+  industry?: string;
+  city?: string;
+  state?: string;
   date: string;
+
+  // Product / Service Details
+  productName?: string;
+  drawingNo?: string;
+  materialType?: string;
+  machineType?: string;
+  process?: string;
+  moq?: number;
+  quotedQty?: number;
+
+  // Cost Breakup
+  rawMaterialCost?: number;
+  machiningCost?: number;
+  laborCost?: number;
+  overhead?: number;
+  transportationCost?: number;
+  otherCharges?: number;
+
+  // Final Pricing
+  tech: TechCategory;
+  rate: number; // Quoted Price per piece
+  unit: string;
+  totalAmount?: number;
+  marginPercent?: number;
+  currency?: string;
+  validTill?: string;
+
+  // Payment Terms
+  paymentMode?: string;
+  creditDays?: number;
+  advancePercent?: number;
+  gstIncluded?: boolean;
+
+  // Status
+  status: PricingStatus;
 }
 
 export interface Customer {
@@ -54,6 +100,8 @@ export interface Customer {
   city: string;
   state: string;
   country: string;
+  areaSector?: string;
+  pincode?: string;
   annualTurnover: number;
   projectTurnover: number;
   industry: string;
@@ -78,6 +126,48 @@ export interface Expo {
   industry: string;
   region: string;
   link?: string;
+  eventType?: string;
+  organizerName?: string;
+  website?: string;
+
+  // Phase 2 Expansion
+  startDate?: string;
+  endDate?: string;
+  city?: string;
+  state?: string;
+  venue?: string;
+  zone?: 'North' | 'South' | 'West' | 'East' | 'Central';
+
+  participationType?: 'Visitor' | 'Exhibitor';
+  stallNo?: string;
+  boothSize?: string;
+  feeCost?: number;
+  registrationStatus?: 'Applied' | 'Confirmed';
+
+  assignedTeam?: string; // Comma separated or single name for now
+  visitPlan?: string;
+  transportMode?: string;
+  hotelDetails?: string;
+  budget?: number;
+
+  // Phase 3 Expansion
+  status?: 'upcoming' | 'live' | 'Completed' | 'canceled';
+
+  // Leads & Business Outcome
+  leadsGenerated?: number;
+  hotLeads?: number;
+  warmLeads?: number;
+  coldLeads?: number;
+  ordersReceived?: number;
+  pipeLineInquiries?: number;
+  newContacts?: number;
+
+  // Documents (Links/Paths)
+  brochureLink?: string;
+  entryPassLink?: string;
+  stallLayoutLink?: string;
+  photosLink?: string;
+  visitorListLink?: string;
 }
 
 export enum VisitStatus {
@@ -103,6 +193,53 @@ export interface Visit {
   visitResult?: string;
   nextFollowUpDate?: string;
   reminderEnabled?: boolean;
+
+  // Transport Details
+  transportMode?: string;
+  vehicleNo?: string;
+  startLocation?: string;
+  endLocation?: string;
+  distance?: number;
+
+  // Payment / Commercial
+  paymentMode?: string;
+  expectedAmount?: number;
+  paymentStatus?: 'Received' | 'Pending' | 'Not Discussed';
+  expectedPaymentDate?: string;
+
+  // Call Logs
+  callLogs?: CallLog[];
+
+  // Phase 2 Fields
+  metContacts?: MetContact[];
+  checklist?: { [key: string]: boolean };
+  attachments?: VisitAttachment[];
+}
+
+export interface MetContact {
+  id: string;
+  name: string;
+  designation: string;
+  phone?: string;
+  email?: string;
+  isDecisionMaker: boolean;
+}
+
+export interface VisitAttachment {
+  id: string;
+  name: string;
+  type: 'Image' | 'Document' | 'Other';
+  url: string;
+}
+
+export interface CallLog {
+  id: string;
+  type: 'Pre-Visit' | 'Post-Visit';
+  date: string;
+  contactPerson: string;
+  purpose: string;
+  notes?: string;
+  completed: boolean;
 }
 
 export type UserRole = 'Admin' | 'Sales' | 'Marketing';

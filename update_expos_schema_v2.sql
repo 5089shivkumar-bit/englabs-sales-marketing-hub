@@ -1,0 +1,18 @@
+-- Phase 2 Migration for expos table expansion
+ALTER TABLE expos 
+ADD COLUMN IF NOT EXISTS start_date DATE,
+ADD COLUMN IF NOT EXISTS end_date DATE,
+ADD COLUMN IF NOT EXISTS city TEXT,
+ADD COLUMN IF NOT EXISTS state TEXT,
+ADD COLUMN IF NOT EXISTS venue TEXT,
+ADD COLUMN IF NOT EXISTS zone TEXT,
+ADD COLUMN IF NOT EXISTS participation_type TEXT, -- 'Visitor' or 'Exhibitor'
+ADD COLUMN IF NOT EXISTS stall_no TEXT,
+ADD COLUMN IF NOT EXISTS booth_size TEXT,
+ADD COLUMN IF NOT EXISTS fee_cost NUMERIC,
+ADD COLUMN IF NOT EXISTS registration_status TEXT, -- 'Applied' or 'Confirmed'
+ADD COLUMN IF NOT EXISTS assigned_team TEXT,
+ADD COLUMN IF NOT EXISTS visit_plan TEXT,
+ADD COLUMN IF NOT EXISTS transport_mode TEXT,
+ADD COLUMN IF NOT EXISTS hotel_details TEXT,
+ADD COLUMN IF NOT EXISTS budget NUMERIC;

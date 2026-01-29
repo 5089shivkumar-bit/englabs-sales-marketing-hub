@@ -58,7 +58,9 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
     industry: '',
     annualTurnover: '',
     contactName: '',
-    contactEmail: ''
+    contactEmail: '',
+    areaSector: '',
+    pincode: ''
   });
 
   const customerFields = [
@@ -138,7 +140,9 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
       industry: customer.industry || '',
       annualTurnover: (customer.annualTurnover || 0).toString(),
       contactName: customer.contacts[0]?.name || '',
-      contactEmail: customer.contacts[0]?.email || ''
+      contactEmail: customer.contacts[0]?.email || '',
+      areaSector: customer.areaSector || '',
+      pincode: customer.pincode || ''
     });
     setShowAddModal(true);
   };
@@ -177,6 +181,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
         state: finalState || 'N/A',
         industry: formCust.industry,
         annualTurnover: parseFloat(formCust.annualTurnover) || 0,
+        areaSector: formCust.areaSector,
+        pincode: formCust.pincode,
         lastModifiedBy: currentUser.name,
         updatedAt: timestamp,
         contacts: editingCustomer.contacts.length > 0
@@ -203,6 +209,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
         state: finalState || 'N/A',
         country: 'India',
         annualTurnover: parseFloat(formCust.annualTurnover) || 0,
+        areaSector: formCust.areaSector,
+        pincode: formCust.pincode,
         projectTurnover: 0,
         industry: formCust.industry || 'Manufacturing',
         contacts: formCust.contactName ? [{
@@ -226,7 +234,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
 
     setShowAddModal(false);
     setEditingCustomer(null);
-    setFormCust({ name: '', city: '', state: '', industry: '', annualTurnover: '', contactName: '', contactEmail: '' });
+    setFormCust({ name: '', city: '', state: '', industry: '', annualTurnover: '', contactName: '', contactEmail: '', areaSector: '', pincode: '' });
   };
 
   const handleExportExcel = () => {
@@ -344,7 +352,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
           <button
             onClick={() => {
               setEditingCustomer(null);
-              setFormCust({ name: '', city: '', state: '', industry: '', annualTurnover: '', contactName: '', contactEmail: '' });
+              setFormCust({ name: '', city: '', state: '', industry: '', annualTurnover: '', contactName: '', contactEmail: '', areaSector: '', pincode: '' });
               setShowAddModal(true);
             }}
             className="flex items-center px-8 py-4 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 text-sm font-black shadow-xl shadow-blue-500/20 transition-all active:scale-95"
@@ -498,6 +506,11 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                   <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100">
                     <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Hub Hub</p>
                     <p className="text-sm font-bold text-slate-900">{selectedCustomer.city}</p>
+                    {(selectedCustomer.areaSector || selectedCustomer.pincode) && (
+                      <p className="text-xs text-slate-500 font-medium mt-1">
+                        {[selectedCustomer.areaSector, selectedCustomer.pincode].filter(Boolean).join(', ')}
+                      </p>
+                    )}
                   </div>
                   <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100">
                     <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Cr Revenue</p>
@@ -577,6 +590,44 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                     <input type="text" value={formCust.industry} onChange={e => setFormCust({ ...formCust, industry: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="e.g. Automotive" />
                   </div>
                   <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Pincode</label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={formCust.pincode}
+                      onChange={e => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        setFormCust(prev => ({ ...prev, pincode: val }));
+
+                        // Simulation of Pincode Lookup
+                        if (val.length === 6) {
+                          // Mock lookup map for demonstration
+                          const mockLookup: Record<string, { city: string, state: string }> = {
+                            '110001': { city: 'New Delhi', state: 'Delhi' },
+                            '400001': { city: 'Mumbai', state: 'Maharashtra' },
+                            '560001': { city: 'Bengaluru', state: 'Karnataka' },
+                            '600001': { city: 'Chennai', state: 'Tamil Nadu' },
+                            '700001': { city: 'Kolkata', state: 'West Bengal' },
+                            '500001': { city: 'Hyderabad', state: 'Telangana' }
+                          };
+
+                          if (mockLookup[val]) {
+                            setFormCust(prev => ({
+                              ...prev,
+                              pincode: val,
+                              city: mockLookup[val].city,
+                              state: mockLookup[val].state
+                            }));
+                          }
+                        }
+                      }}
+                      className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all font-mono tracking-widest"
+                      placeholder="000000"
+                    />
+                    <p className="text-[9px] text-slate-400 font-bold ml-2">City & State will auto-fill. You can edit if needed.</p>
+                  </div>
+
+                  <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">City Hub</label>
                     <input
                       type="text"
@@ -603,7 +654,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                       className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
                       placeholder="e.g. Punjab"
                     />
-                    {formCust.city && !formCust.state && <p className="text-[9px] text-amber-600 font-bold uppercase mt-1 px-2">State will be auto-assigned</p>}
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Area / Sector</label>
+                    <input type="text" value={formCust.areaSector} onChange={e => setFormCust({ ...formCust, areaSector: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="e.g. Sector 58" />
                   </div>
                   <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Annual Revenue (INR)</label>

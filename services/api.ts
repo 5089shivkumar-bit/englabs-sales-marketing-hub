@@ -41,7 +41,33 @@ export const api = {
                     tech: p.tech as TechCategory,
                     rate: p.rate,
                     unit: p.unit,
-                    date: p.date
+                    date: p.date,
+                    salesPerson: p.sales_person,
+                    industry: p.industry,
+                    city: p.city,
+                    state: p.state,
+                    productName: p.product_name,
+                    drawingNo: p.drawing_no,
+                    materialType: p.material_type,
+                    machineType: p.machine_type,
+                    process: p.process,
+                    moq: p.moq,
+                    quotedQty: p.quoted_qty,
+                    rawMaterialCost: p.raw_material_cost,
+                    machiningCost: p.machining_cost,
+                    laborCost: p.labor_cost,
+                    overhead: p.overhead,
+                    transportationCost: p.transportation_cost,
+                    otherCharges: p.other_charges,
+                    totalAmount: p.total_amount,
+                    marginPercent: p.margin_percent,
+                    currency: p.currency,
+                    validTill: p.valid_till,
+                    paymentMode: p.payment_mode,
+                    creditDays: p.credit_days,
+                    advancePercent: p.advance_percent,
+                    gstIncluded: p.gst_included,
+                    status: p.status
                 })),
                 lastModifiedBy: row.last_modified_by,
                 updatedAt: row.updated_at
@@ -137,23 +163,182 @@ export const api = {
         async fetchAll(): Promise<Expo[]> {
             const { data, error } = await supabase.from('expos').select('*');
             if (error) throw error;
-            return data || [];
+            return (data || []).map(row => ({
+                id: row.id,
+                name: row.name,
+                date: row.date,
+                location: row.location,
+                industry: row.industry,
+                region: row.region,
+                link: row.link,
+                eventType: row.event_type,
+                organizerName: row.organizer_name,
+                website: row.website,
+                startDate: row.start_date,
+                endDate: row.end_date,
+                city: row.city,
+                state: row.state,
+                venue: row.venue,
+                zone: row.zone,
+                participationType: row.participation_type,
+                stallNo: row.stall_no,
+                boothSize: row.booth_size,
+                feeCost: row.fee_cost,
+                registrationStatus: row.registration_status,
+                assignedTeam: row.assigned_team,
+                visitPlan: row.visit_plan,
+                transportMode: row.transport_mode,
+                hotelDetails: row.hotel_details,
+                budget: row.budget,
+                status: row.status,
+                leadsGenerated: row.leads_generated,
+                hotLeads: row.hot_leads,
+                warmLeads: row.warm_leads,
+                coldLeads: row.cold_leads,
+                ordersReceived: row.orders_received,
+                pipeLineInquiries: row.pipeline_inquiries,
+                newContacts: row.new_contacts,
+                brochureLink: row.brochure_link,
+                entryPassLink: row.entry_pass_link,
+                stallLayoutLink: row.stall_layout_link,
+                photosLink: row.photos_link,
+                visitorListLink: row.visitor_list_link
+            }));
         },
         async create(expo: Expo): Promise<Expo> {
             const { data, error } = await supabase.from('expos').insert({
                 name: expo.name,
-                date: expo.date,
+                date: (expo.date || '').trim() || null,
                 location: expo.location,
                 industry: expo.industry,
                 region: expo.region,
-                link: expo.link
+                link: expo.link || null,
+                event_type: expo.eventType,
+                organizer_name: expo.organizerName || null,
+                website: expo.website || null,
+                start_date: expo.startDate || null,
+                end_date: expo.endDate || null,
+                city: expo.city || null,
+                state: expo.state || null,
+                venue: expo.venue || null,
+                zone: expo.zone || null,
+                participation_type: expo.participationType,
+                stall_no: expo.stallNo || null,
+                booth_size: expo.boothSize || null,
+                fee_cost: expo.feeCost ?? 0,
+                registration_status: expo.registrationStatus,
+                assigned_team: expo.assignedTeam || null,
+                visit_plan: expo.visitPlan || null,
+                transport_mode: expo.transportMode || null,
+                hotel_details: expo.hotelDetails || null,
+                budget: expo.budget ?? 0,
+                status: expo.status,
+                leads_generated: expo.leadsGenerated ?? 0,
+                hot_leads: expo.hotLeads ?? 0,
+                warm_leads: expo.warmLeads ?? 0,
+                cold_leads: expo.coldLeads ?? 0,
+                orders_received: expo.ordersReceived ?? 0,
+                pipeline_inquiries: expo.pipeLineInquiries ?? 0,
+                new_contacts: expo.newContacts ?? 0,
+                brochure_link: expo.brochureLink || null,
+                entry_pass_link: expo.entryPassLink || null,
+                stall_layout_link: expo.stallLayoutLink || null,
+                photos_link: expo.photosLink || null,
+                visitor_list_link: expo.visitorListLink || null
             }).select().single();
 
             if (error) throw error;
-            return { ...expo, id: data.id };
+
+            // Map the snake_case data back to camelCase Expo object
+            return {
+                id: data.id,
+                name: data.name,
+                date: data.date,
+                location: data.location,
+                industry: data.industry,
+                region: data.region,
+                link: data.link,
+                eventType: data.event_type,
+                organizerName: data.organizer_name,
+                website: data.website,
+                startDate: data.start_date,
+                endDate: data.end_date,
+                city: data.city,
+                state: data.state,
+                venue: data.venue,
+                zone: data.zone,
+                participationType: data.participation_type,
+                stallNo: data.stall_no,
+                boothSize: data.booth_size,
+                feeCost: data.fee_cost,
+                registrationStatus: data.registration_status,
+                assignedTeam: data.assigned_team,
+                visitPlan: data.visit_plan,
+                transportMode: data.transport_mode,
+                hotelDetails: data.hotel_details,
+                budget: data.budget,
+                status: data.status,
+                leadsGenerated: data.leads_generated,
+                hotLeads: data.hot_leads,
+                warmLeads: data.warm_leads,
+                coldLeads: data.cold_leads,
+                ordersReceived: data.orders_received,
+                pipeLineInquiries: data.pipeline_inquiries,
+                newContacts: data.new_contacts,
+                brochureLink: data.brochure_link,
+                entryPassLink: data.entry_pass_link,
+                stallLayoutLink: data.stall_layout_link,
+                photosLink: data.photos_link,
+                visitorListLink: data.visitor_list_link
+            };
+        },
+        async update(id: string, expo: Partial<Expo>): Promise<void> {
+            const { error } = await supabase.from('expos').update({
+                name: expo.name,
+                date: (expo.date || '').trim() || null,
+                location: expo.location,
+                industry: expo.industry,
+                region: expo.region,
+                link: expo.link || null,
+                event_type: expo.eventType,
+                organizer_name: expo.organizerName || null,
+                website: expo.website || null,
+                start_date: expo.startDate || null,
+                end_date: expo.endDate || null,
+                city: expo.city || null,
+                state: expo.state || null,
+                venue: expo.venue || null,
+                zone: expo.zone || null,
+                participation_type: expo.participationType,
+                stall_no: expo.stallNo || null,
+                booth_size: expo.boothSize || null,
+                fee_cost: expo.feeCost,
+                registration_status: expo.registrationStatus,
+                assigned_team: expo.assignedTeam || null,
+                visit_plan: expo.visitPlan || null,
+                transport_mode: expo.transportMode || null,
+                hotel_details: expo.hotelDetails || null,
+                budget: expo.budget,
+                status: expo.status,
+                leads_generated: expo.leadsGenerated,
+                hot_leads: expo.hotLeads,
+                warm_leads: expo.warmLeads,
+                cold_leads: expo.coldLeads,
+                orders_received: expo.ordersReceived,
+                pipeline_inquiries: expo.pipeLineInquiries,
+                new_contacts: expo.newContacts,
+                brochure_link: expo.brochureLink || null,
+                entry_pass_link: expo.entryPassLink || null,
+                stall_layout_link: expo.stallLayoutLink || null,
+                photos_link: expo.photosLink || null,
+                visitor_list_link: expo.visitorListLink || null
+            }).eq('id', id);
+
+            if (error) throw error;
         },
         async delete(id: string): Promise<void> {
-            await supabase.from('expos').delete().eq('id', id);
+            const { error } = await supabase.from('expos').delete().eq('id', id);
+            if (error) throw error;
         }
     },
 
@@ -634,6 +819,107 @@ export const api = {
                 performed_by: log.performedBy
             });
             if (error) throw error;
+        }
+    },
+
+    pricing: {
+        async create(record: PricingRecord): Promise<PricingRecord> {
+            const { data, error } = await supabase.from('pricing_history').insert({
+                customer_id: record.customerId,
+                tech: record.tech,
+                rate: record.rate,
+                unit: record.unit,
+                date: record.date,
+                sales_person: record.salesPerson,
+                industry: record.industry,
+                city: record.city,
+                state: record.state,
+                product_name: record.productName,
+                drawing_no: record.drawingNo,
+                material_type: record.materialType,
+                machine_type: record.machineType,
+                process: record.process,
+                moq: record.moq,
+                quoted_qty: record.quotedQty,
+                raw_material_cost: record.rawMaterialCost,
+                machining_cost: record.machiningCost,
+                labor_cost: record.laborCost,
+                overhead: record.overhead,
+                transportation_cost: record.transportationCost,
+                other_charges: record.otherCharges,
+                total_amount: record.totalAmount,
+                margin_percent: record.marginPercent,
+                currency: record.currency,
+                valid_till: record.validTill,
+                payment_mode: record.paymentMode,
+                credit_days: record.creditDays,
+                advance_percent: record.advancePercent,
+                gst_included: record.gstIncluded,
+                status: record.status
+            }).select().single();
+
+            if (error) throw error;
+            return { ...record, id: data.id };
+        },
+
+        async update(record: PricingRecord): Promise<void> {
+            const { error } = await supabase.from('pricing_history').update({
+                tech: record.tech,
+                rate: record.rate,
+                unit: record.unit,
+                date: record.date,
+                sales_person: record.salesPerson,
+                industry: record.industry,
+                city: record.city,
+                state: record.state,
+                product_name: record.productName,
+                drawing_no: record.drawingNo,
+                material_type: record.materialType,
+                machine_type: record.machineType,
+                process: record.process,
+                moq: record.moq,
+                quoted_qty: record.quotedQty,
+                raw_material_cost: record.rawMaterialCost,
+                machining_cost: record.machiningCost,
+                labor_cost: record.laborCost,
+                overhead: record.overhead,
+                transportation_cost: record.transportationCost,
+                other_charges: record.otherCharges,
+                total_amount: record.totalAmount,
+                margin_percent: record.marginPercent,
+                currency: record.currency,
+                valid_till: record.validTill,
+                payment_mode: record.paymentMode,
+                credit_days: record.creditDays,
+                advance_percent: record.advancePercent,
+                gst_included: record.gstIncluded,
+                status: record.status
+            }).eq('id', record.id);
+
+            if (error) throw error;
+        },
+
+        async delete(id: string): Promise<void> {
+            const { error } = await supabase.from('pricing_history').delete().eq('id', id);
+            if (error) throw error;
+        }
+    },
+    storage: {
+        async upload(bucket: string, path: string, file: File): Promise<string> {
+            const { data, error } = await supabase.storage
+                .from(bucket)
+                .upload(path, file, {
+                    cacheControl: '3600',
+                    upsert: true
+                });
+
+            if (error) throw error;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from(bucket)
+                .getPublicUrl(data.path);
+
+            return publicUrl;
         }
     }
 };

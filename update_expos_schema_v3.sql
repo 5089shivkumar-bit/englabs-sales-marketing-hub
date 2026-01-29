@@ -1,0 +1,15 @@
+-- Phase 3 Migration for expos table expansion
+ALTER TABLE expos 
+ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'upcoming', -- 'upcoming', 'live', 'Completed', 'canceled'
+ADD COLUMN IF NOT EXISTS leads_generated INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS hot_leads INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS warm_leads INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS cold_leads INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS orders_received NUMERIC DEFAULT 0,
+ADD COLUMN IF NOT EXISTS pipeline_inquiries INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS new_contacts INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS brochure_link TEXT,
+ADD COLUMN IF NOT EXISTS entry_pass_link TEXT,
+ADD COLUMN IF NOT EXISTS stall_layout_link TEXT,
+ADD COLUMN IF NOT EXISTS photos_link TEXT,
+ADD COLUMN IF NOT EXISTS visitor_list_link TEXT;
