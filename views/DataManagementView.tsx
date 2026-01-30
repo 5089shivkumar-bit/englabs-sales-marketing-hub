@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Database, 
-  FileSpreadsheet, 
-  ArrowUpCircle, 
-  ArrowDownCircle, 
-  Clock, 
+import {
+  Database,
+  FileSpreadsheet,
+  ArrowUpCircle,
+  ArrowDownCircle,
+  Clock,
   Search,
   CheckCircle2,
   Trash2,
@@ -21,12 +21,17 @@ import {
   Box,
   Copy,
   Terminal,
-  Cpu
+  Cpu,
+  Upload
 } from 'lucide-react';
 import { ExcelImporter } from '../components/ExcelImporter';
 import { Customer, Expo, PricingRecord, Visit, normalizeTechCategory } from '../types';
 import { INDIA_GEO_DATA } from '../constants';
 import { dateUtils } from '../services/dateUtils';
+import { geoService } from '../services/geoService';
+import { excelService } from '../services/excelService';
+import { api } from '../services/api';
+import { Project, ProjectStatus, ProjectType } from '../types';
 
 interface DataManagementViewProps {
   customers: Customer[];
@@ -37,15 +42,15 @@ interface DataManagementViewProps {
   visits: Visit[];
 }
 
-export const DataManagementView: React.FC<DataManagementViewProps> = ({ 
-  customers, 
-  setCustomers, 
-  expos, 
+export const DataManagementView: React.FC<DataManagementViewProps> = ({
+  customers,
+  setCustomers,
+  expos,
   setExpos,
   marketingTeam,
   visits
 }) => {
-  const [activeModal, setActiveModal] = useState<'customers' | 'pricing' | 'expos' | null>(null);
+  const [activeModal, setActiveModal] = useState<boolean>(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [logs, setLogs] = useState(() => {
     const savedLogs = localStorage.getItem('enging_import_logs');
@@ -53,40 +58,14 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
       { id: 1, action: 'Initial System Load', count: 'Seed', date: 'System', status: 'Success' }
     ];
   });
+  const [history, setHistory] = useState<{ customers: Customer[], expos: Expo[] }[]>([]);
 
   // Listener for global export event from Layout
   useEffect(() => {
-    const handleGlobalTrigger = () => handleAntiGravityExport(true);
-    window.addEventListener('trigger-antigravity-export', handleGlobalTrigger);
-    return () => window.removeEventListener('trigger-antigravity-export', handleGlobalTrigger);
-  }, [customers, expos, marketingTeam, visits]);
-
-  const importConfigs = {
-    customers: [
-      { key: 'name', label: 'Customer Name', required: true },
-      { key: 'city', label: 'City' },
-      { key: 'state', label: 'State' },
-      { key: 'country', label: 'Country' },
-      { key: 'industry', label: 'Industry' },
-      { key: 'annualTurnover', label: 'Annual Turnover' },
-      { key: 'contactName', label: 'Primary Contact' },
-      { key: 'contactEmail', label: 'Contact Email' }
-    ],
-    pricing: [
-      { key: 'customerName', label: 'Customer Name', required: true },
-      { key: 'tech', label: 'Technology / Material Category', required: true },
-      { key: 'rate', label: 'Rate / Price' },
-      { key: 'unit', label: 'Unit (e.g., gram, ml)', required: true },
-      { key: 'date', label: 'Effective Date' }
-    ],
-    expos: [
-      { key: 'name', label: 'Event Name', required: true },
-      { key: 'location', label: 'Location' },
-      { key: 'date', label: 'Date' },
-      { key: 'industry', label: 'Industry Focus' },
-      { key: 'region', label: 'Region' }
-    ]
-  };
+    const handleGlobalTrigger = () => setActiveModal(true);
+    window.addEventListener('trigger-antigravity-import', handleGlobalTrigger);
+    return () => window.removeEventListener('trigger-antigravity-import', handleGlobalTrigger);
+  }, []);
 
   const getExportPayload = () => {
     return {
@@ -125,12 +104,25 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
       setCopyFeedback(true);
       setTimeout(() => setCopyFeedback(false), 2000);
     }
-    
+
     addLog('Anti-Gravity Export Executed', exportData.meta.total_record_count, 'Success');
   };
 
-  const handleImport = (data: any[]) => {
-    if (activeModal === 'customers') {
+  const saveHistory = () => {
+    setHistory(prev => [{ customers: JSON.parse(JSON.stringify(customers)), expos: JSON.parse(JSON.stringify(expos)) }, ...prev].slice(0, 5));
+  };
+
+  const handleRollback = () => {
+    if (history.length === 0) return;
+    const lastState = history[0];
+    setCustomers(lastState.customers);
+    setExpos(lastState.expos);
+    setHistory(prev => prev.slice(1));
+    addLog('System Rollback Triggered', 0, 'Recovered');
+  };
+
+  const handleImport = (data: any[], importType: string) => {
+    if (importType === 'customers') {
       const newCustomers: Customer[] = data.map(row => ({
         id: `c-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
         name: String(row.name || "").trim(),
@@ -149,15 +141,15 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
         }] : [],
         pricingHistory: []
       })).filter(c => c.name.length > 0);
-      
+
       setCustomers(prev => {
         const existingNames = new Set(prev.map(c => c.name.toLowerCase().trim()));
         const uniqueNew = newCustomers.filter(c => !existingNames.has(c.name.toLowerCase().trim()));
         return [...prev, ...uniqueNew];
       });
       addLog('Bulk Saved Customers', data.length, 'Success');
-    } 
-    else if (activeModal === 'pricing') {
+    }
+    else if (importType === 'pricing') {
       setCustomers(prev => {
         const next = [...prev];
         let matchedCount = 0;
@@ -173,7 +165,9 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
               tech: normalizedTech,
               rate: parseFloat(row.rate) || 0,
               unit: String(row.unit || "gram").trim(),
-              date: row.date || dateUtils.getISTIsoDate()
+              date: row.date || dateUtils.getISTIsoDate(),
+              // @ts-ignore
+              status: "Approved"
             };
             cust.pricingHistory = [newPricing, ...cust.pricingHistory];
           }
@@ -182,7 +176,7 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
         return next;
       });
     }
-    else if (activeModal === 'expos') {
+    else if (importType === 'expos') {
       const newExpos: Expo[] = data.map(row => ({
         id: `e-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
         name: String(row.name || "").trim(),
@@ -192,7 +186,130 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
         region: String(row.region || "India").trim()
       })).filter(e => e.name.length > 0);
       setExpos(prev => [...prev, ...newExpos]);
-      addLog('Bulk Saved National Expos', newExpos.length, 'Success');
+      addLog('Bulk Saved Master Inquiries', newExpos.length, 'Success');
+    }
+    else if (importType === 'automatic') {
+      saveHistory();
+      const mapped = excelService.mapAutomaticExcel(data);
+
+      const newCustomers: Customer[] = [];
+      const newExpos: Expo[] = [];
+      const newProjects: Project[] = [];
+      const newPricing: { custName: string, record: PricingRecord }[] = [];
+
+      mapped.forEach(row => {
+        let finalCity = row.city;
+        let finalState = row.state;
+        if (row.pincode) {
+          const geo = geoService.lookupPincode(row.pincode);
+          if (geo) {
+            finalCity = geo.city;
+            finalState = geo.state;
+          }
+        }
+        if (finalCity && !finalState) {
+          finalState = geoService.inferStateFromCity(finalCity) || "";
+        }
+
+        const existingCust = customers.find(c => c.name.toLowerCase().trim() === row.leadName.toLowerCase().trim());
+        const isDuplicateCustomerInBatch = newCustomers.find(c => c.name.toLowerCase().trim() === row.leadName.toLowerCase().trim());
+
+        if (!existingCust && !isDuplicateCustomerInBatch) {
+          newCustomers.push({
+            id: `c-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            name: row.leadName,
+            city: finalCity || "N/A",
+            state: finalState || "",
+            country: "India",
+            industry: row.industry || "Manufacturing",
+            annualTurnover: 0,
+            projectTurnover: 0,
+            contacts: [],
+            pricingHistory: [],
+            status: row.status as any
+          });
+        }
+
+        if (row.value > 0) {
+          const custId = existingCust?.id || "";
+          const isDuplicatePricing = existingCust?.pricingHistory.some(ph => ph.rate === row.value && ph.date === row.date);
+
+          if (!isDuplicatePricing) {
+            // @ts-ignore
+            const pricingStatus: any = "Approved";
+            newPricing.push({
+              custName: row.leadName,
+              record: {
+                id: `p-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                customerId: custId,
+                tech: normalizeTechCategory('Mechanical'),
+                rate: row.value,
+                unit: 'Project',
+                date: row.date,
+                status: pricingStatus
+              }
+            });
+          }
+        }
+
+        const expoName = `Inquiry: ${row.inquiryId}`;
+        const isDuplicateExpo = expos.find(e => e.name === expoName || (e.date === row.date && e.name.includes(row.leadName)));
+
+        if (!isDuplicateExpo) {
+          newExpos.push({
+            id: `e-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            name: expoName,
+            date: row.date,
+            location: finalCity || "Direct",
+            industry: "Mechanical",
+            region: finalState || "India",
+            status: row.status // Map status from Excel
+          } as any);
+        }
+
+        // --- Automate Project Management Distribution ---
+        newProjects.push({
+          id: `proj-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          name: `${row.leadName} - ${row.inquiryId}`,
+          type: ProjectType.IN_HOUSE,
+          description: `Automatic distribution from Anti-Gravity Engine. Source: ${row.inquiryId}`,
+          startDate: row.date,
+          endDate: row.date,
+          status: 'Active',
+          createdBy: 'Anti-Gravity Engine',
+          companyName: row.leadName,
+          location: finalCity || 'N/A',
+          updatedAt: new Date().toISOString()
+        });
+      });
+
+      // Update Local State for immediate feedback
+      setCustomers(prev => {
+        const next = [...prev, ...newCustomers];
+        newPricing.forEach(np => {
+          const c = next.find(cust => cust.name.toLowerCase().trim() === np.custName.toLowerCase().trim());
+          if (c) {
+            np.record.customerId = c.id;
+            c.pricingHistory = [np.record, ...c.pricingHistory];
+          }
+        });
+        return next;
+      });
+      setExpos(prev => [...prev, ...newExpos]);
+
+      // --- PERSISTENCE LAYER: Save to Supabase ---
+      const persistData = async () => {
+        try {
+          if (newCustomers.length > 0) await api.customers.bulkCreate(newCustomers);
+          if (newExpos.length > 0) await api.expos.bulkCreate(newExpos);
+          if (newProjects.length > 0) await api.projects.bulkCreate(newProjects);
+          addLog('Anti-Gravity Intelligence Sync', mapped.length, 'Success');
+        } catch (err) {
+          console.error("Persistence failed", err);
+          addLog('Persistence Warning', mapped.length, 'Partial Success');
+        }
+      };
+      persistData();
     }
   };
 
@@ -201,7 +318,7 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
       id: Date.now(),
       action,
       count: count.toString(),
-      date: dateUtils.formatISTTime(), 
+      date: dateUtils.formatISTTime(),
       status
     }, ...logs].slice(0, 15);
     setLogs(newLogs);
@@ -223,7 +340,7 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
           <p className="text-slate-500 text-lg">Master persistence and Anti-Gravity extraction controls.</p>
         </div>
         <div className="flex items-center space-x-4">
-          <button 
+          <button
             onClick={clearDatabase}
             className="flex items-center px-6 py-3 border border-rose-200 text-rose-600 bg-rose-50 rounded-2xl hover:bg-rose-100 text-sm font-bold transition-all shadow-sm active:scale-95"
           >
@@ -239,80 +356,44 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <ImportCard 
-          title="Clients & CRM" 
-          description="Read and save national client lists with auto-geo state mapping."
-          icon={FileSpreadsheet}
-          color="blue"
-          onClick={() => setActiveModal('customers')}
-        />
-        <ImportCard 
-          title="Market Pricing" 
-          description="Bulk update material rates and manufacturing pricing histories."
-          icon={Layers}
-          color="emerald"
-          onClick={() => setActiveModal('pricing')}
-        />
-        <ImportCard 
-          title="Global Expos" 
-          description="Import major industrial events and national manufacturing hub expos."
-          icon={Globe}
-          color="indigo"
-          onClick={() => setActiveModal('expos')}
-        />
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+        <div className="lg:col-span-12">
+          <div
+            onClick={() => setActiveModal(true)}
+            className="bg-gradient-to-br from-blue-600 via-indigo-700 to-slate-900 rounded-[3rem] p-12 text-white relative overflow-hidden shadow-2xl group cursor-pointer hover:scale-[1.01] transition-all"
+          >
+            <div className="absolute top-0 right-0 p-10 opacity-10 group-hover:scale-110 transition-all duration-700">
+              <Zap size={300} />
+            </div>
 
-      {/* Special Anti-Gravity Export Section (Re-designed for tool usage) */}
-      <div className="bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#0F172A] rounded-[3rem] p-12 text-white relative overflow-hidden shadow-2xl border border-slate-700">
-        <div className="absolute top-0 right-0 p-20 opacity-5 pointer-events-none">
-          <Cpu size={300} className="text-blue-400" />
-        </div>
-        
-        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-          <div className="lg:col-span-7 space-y-6">
-            <div className="flex items-center space-x-3 bg-blue-500/10 w-fit px-5 py-2 rounded-full border border-blue-500/20">
-              <Terminal size={14} className="text-blue-400" />
-              <span className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-300">Anti-Gravity Protocol Verified</span>
-            </div>
-            <h3 className="text-5xl font-black tracking-tighter leading-none">Export Master Registry</h3>
-            <p className="text-slate-400 text-lg leading-relaxed max-w-xl">
-              Extract the entire organizational state for direct injection into the Anti-Gravity processing tool. 
-              Current payload size: <span className="text-white font-black underline decoration-blue-500">{(customers.length + expos.length + marketingTeam.length + visits.length)} high-fidelity records</span>.
-            </p>
-            <div className="flex items-center space-x-3 text-emerald-400 bg-emerald-500/10 w-fit px-4 py-2 rounded-xl border border-emerald-500/20 animate-pulse">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-              <span className="text-[10px] font-black uppercase tracking-widest">Master Buffer Synchronized</span>
-            </div>
-          </div>
-          
-          <div className="lg:col-span-5 flex flex-col space-y-4">
-            <button 
-              onClick={() => handleAntiGravityExport(true)}
-              className="group w-full py-8 bg-blue-600 hover:bg-white hover:text-blue-900 text-white rounded-3xl font-black text-xl uppercase tracking-widest shadow-2xl transition-all active:scale-95 flex items-center justify-center"
-            >
-              <Download size={28} className="mr-4 group-hover:bounce" />
-              Download JSON
-            </button>
-            
-            <div className="flex gap-4">
-              <button 
-                onClick={() => handleAntiGravityExport(false)}
-                className={`flex-1 py-5 border-2 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center ${
-                  copyFeedback 
-                  ? 'bg-emerald-600 border-emerald-600 text-white' 
-                  : 'bg-transparent border-slate-700 text-slate-300 hover:border-blue-400 hover:text-blue-400'
-                }`}
-              >
-                {copyFeedback ? (
-                  <><CheckCircle2 size={16} className="mr-2" /> Buffer Updated</>
-                ) : (
-                  <><Copy size={16} className="mr-2" /> Copy Master Payload</>
-                )}
-              </button>
-              
-              <div className="flex-none p-5 bg-slate-800/50 rounded-2xl border border-slate-700 text-blue-400">
-                <Share2 size={20} />
+            <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 items-center gap-12">
+              <div className="space-y-6">
+                <div className="bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center mb-8 shadow-xl backdrop-blur-md">
+                  <Zap size={32} className="fill-current" />
+                </div>
+                <h3 className="text-5xl font-black tracking-tighter leading-none italic">ANTI-GRAVITY ENGINE</h3>
+                <p className="text-blue-100 text-xl leading-relaxed max-w-sm">
+                  The ultimate one-stop upload engine. Automatically read, clean, and map all organizational data.
+                </p>
+                <div className="flex items-center space-x-3 text-emerald-300 bg-emerald-500/10 w-fit px-4 py-2 rounded-xl border border-emerald-500/20">
+                  <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                  <span className="text-[10px] font-black uppercase tracking-widest italic">All Modules Ready for Sync</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col space-y-4">
+                <div className="px-10 py-8 bg-white text-slate-900 rounded-[2.5rem] font-black text-2xl uppercase tracking-widest shadow-2xl flex items-center justify-center group-hover:bg-blue-50 transition-colors">
+                  <Upload size={28} className="mr-4 text-blue-600" />
+                  ⚡ Anti-Gravity Import
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  {['Master Inquiries', 'Pricing', 'Customers'].map(item => (
+                    <div key={item} className="bg-white/10 p-4 rounded-2xl border border-white/10 flex flex-col items-center justify-center text-center">
+                      <p className="text-[9px] font-black uppercase tracking-tighter text-blue-200">{item}</p>
+                      <CheckCircle2 size={12} className="mt-2 text-emerald-400" />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -335,10 +416,11 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
                     <th className="px-8 py-5">Record Volume</th>
                     <th className="px-8 py-5">Timestamp</th>
                     <th className="px-8 py-5">Persistence Status</th>
+                    <th className="px-8 py-5">Control</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {logs.map(log => (
+                  {logs.map((log, index) => (
                     <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="px-8 py-6">
                         <div className="flex items-center">
@@ -351,7 +433,18 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
                       <td className="px-8 py-6 text-sm text-slate-600 font-bold">{log.count} Items</td>
                       <td className="px-8 py-6 text-[11px] text-slate-400 font-black">{log.date}</td>
                       <td className="px-8 py-6">
-                         <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[9px] font-black uppercase tracking-tighter border border-emerald-100">Verified</span>
+                        <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[9px] font-black uppercase tracking-tighter border border-emerald-100">Verified</span>
+                      </td>
+                      <td className="px-8 py-6">
+                        {index === 0 && history.length > 0 && (
+                          <button
+                            onClick={handleRollback}
+                            className="flex items-center space-x-1 text-rose-500 hover:text-rose-700 font-black text-[10px] uppercase tracking-widest bg-rose-50 px-3 py-2 rounded-xl border border-rose-100 transition-all hover:scale-105"
+                          >
+                            <ShieldAlert size={12} />
+                            <span>Rollback</span>
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -366,7 +459,7 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
             <h3 className="text-2xl font-black mb-8">Registry Insights</h3>
             <div className="space-y-8">
               <InsightRow label="Total Customers" value={customers.length} color="blue" />
-              <InsightRow label="Events Logged" value={expos.length} color="indigo" />
+              <InsightRow label="Inquiries Logged" value={expos.length} color="indigo" />
               <InsightRow label="Pricing Points" value={customers.reduce((acc, c) => acc + c.pricingHistory.length, 0)} color="emerald" />
               <InsightRow label="Personnel Active" value={marketingTeam.length} color="amber" />
             </div>
@@ -385,12 +478,10 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
       </div>
 
       {activeModal && (
-        <ExcelImporter 
-          type={activeModal} 
-          targetFields={importConfigs[activeModal]}
-          onClose={() => setActiveModal(null)}
-          onImport={(data) => {
-            handleImport(data);
+        <ExcelImporter
+          onClose={() => setActiveModal(false)}
+          onImport={(data, importType) => {
+            handleImport(data, importType);
           }}
         />
       )}
@@ -421,36 +512,6 @@ const InsightRow: React.FC<{ label: string; value: number; color: string }> = ({
       </div>
       <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-white/5">
         <div className={`h-full ${barColor} transition-all duration-1000 shadow-[0_0_15px_rgba(59,130,246,0.3)]`} style={{ width: `${Math.min(value * 2, 100)}%` }}></div>
-      </div>
-    </div>
-  );
-};
-
-const ImportCard: React.FC<{ 
-  title: string; 
-  description: string; 
-  icon: React.ElementType; 
-  color: string; 
-  onClick: () => void 
-}> = ({ title, description, icon: Icon, color, onClick }) => {
-  const colorClasses = {
-    blue: 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-white hover:border-blue-400',
-    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-white hover:border-emerald-400',
-    indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-white hover:border-indigo-400',
-  }[color];
-
-  return (
-    <div 
-      onClick={onClick}
-      className={`p-10 rounded-[3rem] border-2 transition-all cursor-pointer group shadow-sm ${colorClasses}`}
-    >
-      <div className="mb-8 inline-flex p-5 rounded-3xl bg-white shadow-lg group-hover:scale-110 transition-transform">
-        <Icon size={32} />
-      </div>
-      <h3 className="text-2xl font-black text-slate-900 mb-3">{title}</h3>
-      <p className="text-slate-500 text-sm leading-relaxed mb-8">{description}</p>
-      <div className="flex items-center text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-blue-600 transition-colors">
-        Open Importer <ArrowRight size={14} className="ml-2 group-hover:translate-x-1 transition-transform" />
       </div>
     </div>
   );

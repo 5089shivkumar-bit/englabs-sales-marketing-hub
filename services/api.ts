@@ -90,6 +90,7 @@ export const api = {
                     machine_types: customer.machineTypes,
                     company_size: customer.companySize,
                     coords: customer.coords,
+                    status: customer.status,
                     last_modified_by: customer.lastModifiedBy,
                     updated_at: new Date().toISOString()
                 })
@@ -129,6 +130,7 @@ export const api = {
                     machine_types: customer.machineTypes,
                     company_size: customer.companySize,
                     coords: customer.coords,
+                    status: customer.status,
                     last_modified_by: customer.lastModifiedBy,
                     updated_at: new Date().toISOString()
                 })
@@ -155,6 +157,22 @@ export const api = {
                 .from('customers')
                 .delete()
                 .eq('id', id);
+            if (error) throw error;
+        },
+
+        async bulkCreate(customers: Customer[]): Promise<void> {
+            const records = customers.map(c => ({
+                name: c.name,
+                city: c.city,
+                state: c.state,
+                country: c.country,
+                annual_turnover: c.annualTurnover,
+                project_turnover: c.projectTurnover,
+                industry: c.industry,
+                status: c.status,
+                updated_at: new Date().toISOString()
+            }));
+            const { error } = await supabase.from('customers').insert(records);
             if (error) throw error;
         }
     },
@@ -339,6 +357,19 @@ export const api = {
         async delete(id: string): Promise<void> {
             const { error } = await supabase.from('expos').delete().eq('id', id);
             if (error) throw error;
+        },
+
+        async bulkCreate(expos: Expo[]): Promise<void> {
+            const records = expos.map(expo => ({
+                name: expo.name,
+                date: (expo.date || '').trim() || null,
+                location: expo.location,
+                industry: expo.industry,
+                region: expo.region,
+                status: expo.status
+            }));
+            const { error } = await supabase.from('expos').insert(records);
+            if (error) throw error;
         }
     },
 
@@ -520,6 +551,23 @@ export const api = {
                 console.error('Delete Project failed:', err);
                 throw err;
             }
+        },
+
+        async bulkCreate(projects: Project[]): Promise<void> {
+            const records = projects.map(project => ({
+                name: project.name,
+                description: project.description,
+                start_date: project.startDate,
+                end_date: project.endDate,
+                status: project.status,
+                created_by: project.createdBy,
+                company_name: project.companyName,
+                project_type: project.type,
+                updated_at: new Date().toISOString(),
+                location: project.location
+            }));
+            const { error } = await supabase.from('projects').insert(records);
+            if (error) throw error;
         }
     },
     expenses: {

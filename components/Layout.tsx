@@ -97,12 +97,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
     return combined;
   }, []);
 
-  const triggerGlobalExport = () => {
-    // Navigate to data mgmt or trigger the event directly if handled globally
+  const triggerGlobalImport = () => {
     setActiveTab('data-mgmt');
-    // We'll let the DataMgmt view handle the actual button press or trigger an event
     setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('trigger-antigravity-export'));
+      window.dispatchEvent(new CustomEvent('trigger-antigravity-import'));
     }, 100);
   };
 
@@ -201,12 +199,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
           <div className="flex items-center space-x-3">
             {/* Global Anti-Gravity Export Trigger */}
             <button
-              onClick={triggerGlobalExport}
+              onClick={triggerGlobalImport}
               className="hidden lg:flex items-center space-x-2 bg-slate-900 text-white px-4 py-2 rounded-xl border border-slate-800 shadow-lg hover:bg-blue-600 transition-all active:scale-95 group"
               title="Quick Anti-Gravity Sync"
             >
               <Zap size={14} className="text-blue-400 group-hover:text-white group-hover:fill-current" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Anti-Gravity Export</span>
+              <span className="text-[10px] font-black uppercase tracking-widest">Anti-Gravity Import</span>
             </button>
 
             <div className="hidden lg:flex items-center space-x-2 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100 mr-2">

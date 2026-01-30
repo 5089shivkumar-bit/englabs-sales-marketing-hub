@@ -46,6 +46,7 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
   const [discoveryMode, setDiscoveryMode] = useState(false);
   const [showDensity, setShowDensity] = useState(true);
   const [activeAlert, setActiveAlert] = useState<{ title: string, msg: string } | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   // Constants for Filters
   const INDUSTRIES = ['Mechanical', 'Automotive', 'Fabrication', 'Tool & Die', 'All'];
@@ -222,6 +223,7 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
       L.control.zoom({ position: 'bottomright' }).addTo(leafletMap.current);
 
       markersLayer.current = L.layerGroup().addTo(leafletMap.current);
+      setMapReady(true);
     }
 
     const timer = setTimeout(() => {
@@ -269,12 +271,33 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
     }
   }, [selectedState, selectedCity, selectedHub, filterRadius, currentCenter]);
 
-  // Calculate Densities
-  const stateDensities = useMemo(() => {
-    const counts: Record<string, number> = {};
+  // Calculate Densities (City-wise)
+  const cityDensities = useMemo(() => {
+    const counts: Record<string, { count: number, coords: [number, number], state: string }> = {};
+
     customers.forEach(c => {
-      if (c.state) {
-        counts[c.state] = (counts[c.state] || 0) + 1;
+      if (c.city && c.city !== 'N/A') {
+        const cityKey = `${c.city}, ${c.state || ''}`.trim();
+        if (!counts[cityKey]) {
+          // Resolve coordinates
+          let coords: [number, number] = [22.5937, 78.9629];
+          if (c.coords) {
+            coords = c.coords;
+          } else if (c.state && INDUSTRIAL_HUBS[c.state]?.[c.city]) {
+            const hubs = INDUSTRIAL_HUBS[c.state][c.city];
+            coords = Object.values(hubs)[0];
+          } else if (c.state && INDIA_GEO_DATA[c.state]) {
+            coords = INDIA_GEO_DATA[c.state].coords;
+          }
+
+          counts[cityKey] = {
+            count: 1,
+            coords,
+            state: c.state || 'India'
+          };
+        } else {
+          counts[cityKey].count++;
+        }
       }
     });
     return counts;
@@ -283,7 +306,7 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
   const densityLayer = useRef<L.LayerGroup | null>(null);
 
   useEffect(() => {
-    if (!leafletMap.current) return;
+    if (!leafletMap.current || !mapReady) return;
 
     if (!densityLayer.current) {
       densityLayer.current = L.layerGroup().addTo(leafletMap.current);
@@ -293,58 +316,57 @@ export const MapView: React.FC<MapViewProps> = ({ customers }) => {
 
     if (!showDensity) return;
 
-    Object.entries(INDIA_GEO_DATA).forEach(([stateName, data]) => {
-      const count = stateDensities[stateName] || 0;
+    Object.entries(cityDensities).forEach(([cityName, entry]) => {
+      const data = entry as any;
+      const { count, coords } = data;
 
       // Color Logic: 
-      // 🟢 Green: More clients (> 10) - Strong Area
-      // 🟡 Yellow: Normal clients (3-10) - Stable Area
-      // 🔴 Red: Very few clients (1-2) - Weak Area
-      // ⚪ Grey: No clients (0) - Opportunity Area
+      // 🟢 Green: More clients (>= 10) - Strong Area
+      // 🟡 Yellow: Medium clients (4-9) - Stable Area
+      // 🔴 Red: Low clients (1-3) - Weak Area
 
-      let color = '#94a3b8'; // Grey-400 (Default/Zero)
-      let radius = 70000; // 70km base
-      let label = 'Opportunity Area';
+      let color = '#ef4444'; // Red-500 (Default < 3)
+      let radius = 25000; // 25km city radius
+      let label = 'Low Density';
+      let opacity = 0.4;
 
       if (count >= 10) {
         color = '#10b981'; // Emerald-500
-        radius = 120000;
-        label = 'Strong Area';
-      } else if (count >= 3) {
+        radius = 50000;
+        label = 'High Density';
+        opacity = 0.5;
+      } else if (count >= 4) {
         color = '#eab308'; // Yellow-500
-        radius = 100000;
-        label = 'Stable Area';
-      } else if (count > 0) {
-        color = '#ef4444'; // Red-500
-        radius = 80000;
-        label = 'Weak Area';
+        radius = 35000;
+        label = 'Medium Density';
+        opacity = 0.4;
       }
 
       // Draw Circle
-      if (data.coords) {
-        // For Opportunity areas (0 clients), we might want slightly less opacity or just a ring?
-        // User said "Areas... should be visible by color... Grey: No clients"
-        // sticking to filled circle for consistency
-
-        L.circle(data.coords, {
+      if (coords) {
+        const circle = L.circle(coords, {
           color: color,
           fillColor: color,
-          fillOpacity: count === 0 ? 0.1 : 0.2,
-          weight: count === 0 ? 1 : 0, // Add slight border for grey areas to make them distinct but subtle
+          fillOpacity: opacity,
+          weight: 1,
           radius: radius
-        }).bindPopup(`
-                <div class="text-center">
-                    <div class="text-xs font-black uppercase text-slate-500 mb-1">${stateName}</div>
-                    <div class="text-lg font-black" style="color: ${color}">${count} Clients</div>
-                    <div class="text-[9px] font-bold uppercase tracking-widest text-slate-400">
+        });
+
+        circle.bindPopup(`
+                <div class="text-center p-2">
+                    <div class="text-[10px] font-black uppercase text-slate-500 mb-1 border-b border-slate-100 pb-1">${cityName}</div>
+                    <div class="text-lg font-black" style="color: ${color}">${count} Active Clients</div>
+                    <div class="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest mt-1" style="background: ${color}20; color: ${color}">
                         ${label}
                     </div>
                 </div>
-            `).addTo(densityLayer.current!);
+            `, { closeButton: false, offset: L.point(0, -20) });
+
+        circle.addTo(densityLayer.current!);
       }
     });
 
-  }, [stateDensities, showDensity, customers]);
+  }, [cityDensities, showDensity, mapReady]);
 
   // Marker Update Logic
   useEffect(() => {

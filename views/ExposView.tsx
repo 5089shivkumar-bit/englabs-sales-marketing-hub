@@ -26,7 +26,6 @@ import {
 } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 import { Expo } from '../types';
-import { ExcelImporter } from '../components/ExcelImporter';
 import { api } from '../services/api';
 
 interface Notification {
@@ -46,7 +45,6 @@ export const ExposView: React.FC<ExposViewProps> = ({ expos, setExpos }) => {
     const saved = localStorage.getItem('enging_expo_reminders');
     return saved ? JSON.parse(saved) : [];
   });
-  const [showImport, setShowImport] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -255,19 +253,6 @@ export const ExposView: React.FC<ExposViewProps> = ({ expos, setExpos }) => {
     }
   };
 
-  const handleImport = (data: any[]) => {
-    const newExpos: Expo[] = data.map(row => ({
-      id: `e-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      name: row.name,
-      date: row.date || '',
-      location: row.location || '',
-      industry: row.industry || 'Mechanical',
-      region: row.region || 'India',
-      eventType: row.eventType || 'Expo / Trade Fair'
-    }));
-    setExpos(prev => [...prev, ...newExpos]);
-    addNotification(`Successfully imported ${newExpos.length} events.`, 'success');
-  };
 
   const fetchLatestExpos = async () => {
     setLoading(true);
@@ -328,9 +313,6 @@ export const ExposView: React.FC<ExposViewProps> = ({ expos, setExpos }) => {
           <p className="text-slate-500">Auto-tracking manufacturing & additive events across all Indian industrial zones.</p>
         </div>
         <div className="flex items-center space-x-3">
-          <button onClick={() => setShowImport(true)} className="flex items-center px-4 py-2 border border-slate-200 bg-white text-slate-700 rounded-2xl hover:bg-slate-50 text-sm font-bold shadow-sm transition-all">
-            <FileSpreadsheet size={18} className="mr-2 text-slate-400" /> Bulk Import
-          </button>
           <button onClick={fetchLatestExpos} disabled={loading} className="group flex items-center px-6 py-3 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 text-sm font-black shadow-xl transition-all">
             {loading ? <RefreshCw className="animate-spin mr-2" size={18} /> : <Sparkles className="mr-2 text-blue-400" size={18} />}
             {loading ? "Scouting..." : "Gather Live Events"}

@@ -114,6 +114,7 @@ export interface Customer {
   industrialHub?: string;
   contacts: ContactPerson[];
   pricingHistory: PricingRecord[];
+  status?: 'Open' | 'Closed';
   lastModifiedBy?: string; // Audit field
   updatedAt?: string; // Audit field
 }

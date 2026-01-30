@@ -28,7 +28,6 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Customer, User } from '../types';
-import { ExcelImporter } from '../components/ExcelImporter';
 import { INDIA_GEO_DATA, ZONES } from '../constants';
 import { dateUtils } from '../services/dateUtils';
 
@@ -46,7 +45,6 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
   const [selectedState, setSelectedState] = useState('All States');
   const [selectedCity, setSelectedCity] = useState('All Cities');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [showImport, setShowImport] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
@@ -60,7 +58,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
     contactName: '',
     contactEmail: '',
     areaSector: '',
-    pincode: ''
+    pincode: '',
+    status: 'Open'
   });
 
   const customerFields = [
@@ -74,35 +73,6 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
     { key: 'contactEmail', label: 'Contact Email' }
   ];
 
-  const handleImport = (data: any[]) => {
-    const newCustomers: Customer[] = data.map(row => ({
-      id: `c-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      name: String(row.name || "").trim(),
-      city: String(row.city || "N/A").trim(),
-      state: String(row.state || "").trim(),
-      country: String(row.country || "India").trim(),
-      industry: String(row.industry || "Manufacturing").trim(),
-      annualTurnover: parseFloat(row.annualTurnover) || 0,
-      projectTurnover: 0,
-      contacts: row.contactName ? [{
-        id: `cp-${Date.now()}`,
-        name: String(row.contactName).trim(),
-        designation: 'Contact',
-        email: String(row.contactEmail || "").trim(),
-        phone: ''
-      }] : [],
-      pricingHistory: [],
-      lastModifiedBy: currentUser.name,
-      updatedAt: dateUtils.getISTTimestamp()
-    })).filter(c => c.name.length > 0);
-
-    setCustomers(prev => {
-      const existingNames = new Set(prev.map(c => c.name.toLowerCase().trim()));
-      const uniqueNew = newCustomers.filter(c => !existingNames.has(c.name.toLowerCase().trim()));
-      return [...prev, ...uniqueNew];
-    });
-    setShowImport(false);
-  };
 
   const handleActionDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -142,7 +112,9 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
       contactName: customer.contacts[0]?.name || '',
       contactEmail: customer.contacts[0]?.email || '',
       areaSector: customer.areaSector || '',
-      pincode: customer.pincode || ''
+      pincode: customer.pincode || '',
+      // @ts-ignore
+      status: customer.status || 'Open'
     });
     setShowAddModal(true);
   };
@@ -183,6 +155,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
         annualTurnover: parseFloat(formCust.annualTurnover) || 0,
         areaSector: formCust.areaSector,
         pincode: formCust.pincode,
+        // @ts-ignore
+        status: formCust.status,
         lastModifiedBy: currentUser.name,
         updatedAt: timestamp,
         contacts: editingCustomer.contacts.length > 0
@@ -213,6 +187,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
         pincode: formCust.pincode,
         projectTurnover: 0,
         industry: formCust.industry || 'Manufacturing',
+        // @ts-ignore
+        status: formCust.status,
         contacts: formCust.contactName ? [{
           id: `cp-${Date.now()}`,
           name: formCust.contactName,
@@ -344,15 +320,9 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
         </div>
         <div className="flex items-center space-x-3">
           <button
-            onClick={() => setShowImport(true)}
-            className="flex items-center px-6 py-4 border border-slate-200 bg-white text-slate-700 rounded-2xl hover:bg-slate-50 text-sm font-bold transition-all shadow-sm"
-          >
-            <FileSpreadsheet size={18} className="mr-3 text-blue-500" /> Bulk Excel Ingest
-          </button>
-          <button
             onClick={() => {
               setEditingCustomer(null);
-              setFormCust({ name: '', city: '', state: '', industry: '', annualTurnover: '', contactName: '', contactEmail: '', areaSector: '', pincode: '' });
+              setFormCust({ name: '', city: '', state: '', industry: '', annualTurnover: '', contactName: '', contactEmail: '', areaSector: '', pincode: '', status: 'Open' });
               setShowAddModal(true);
             }}
             className="flex items-center px-8 py-4 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 text-sm font-black shadow-xl shadow-blue-500/20 transition-all active:scale-95"
@@ -586,7 +556,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                     <input required type="text" value={formCust.name} onChange={e => setFormCust({ ...formCust, name: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="Bharat Aerospace" />
                   </div>
                   <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Primary Industry</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">From</label>
                     <input type="text" value={formCust.industry} onChange={e => setFormCust({ ...formCust, industry: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="e.g. Automotive" />
                   </div>
                   <div className="space-y-3">
@@ -649,11 +619,15 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">State</label>
                     <input
                       type="text"
+                      list="state-list"
                       value={formCust.state}
                       onChange={e => setFormCust({ ...formCust, state: e.target.value })}
                       className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
                       placeholder="e.g. Punjab"
                     />
+                    <datalist id="state-list">
+                      {Object.keys(INDIA_GEO_DATA).sort().map(s => <option key={s} value={s} />)}
+                    </datalist>
                   </div>
                   <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Area / Sector</label>
@@ -664,8 +638,19 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                     <input type="number" value={formCust.annualTurnover} onChange={e => setFormCust({ ...formCust, annualTurnover: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="50000000" />
                   </div>
                   <div className="space-y-3">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Primary Stakeholder</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Handled by</label>
                     <input type="text" value={formCust.contactName} onChange={e => setFormCust({ ...formCust, contactName: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="Rahul Sharma" />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Status</label>
+                    <select
+                      value={formCust.status}
+                      onChange={e => setFormCust({ ...formCust, status: e.target.value as any })}
+                      className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all cursor-pointer"
+                    >
+                      <option value="Open">Open</option>
+                      <option value="Closed">Closed</option>
+                    </select>
                   </div>
                 </div>
               </div>
@@ -682,14 +667,6 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
         </div>
       )}
 
-      {showImport && (
-        <ExcelImporter
-          type="customers"
-          targetFields={customerFields}
-          onImport={handleImport}
-          onClose={() => setShowImport(false)}
-        />
-      )}
     </div>
   );
 };

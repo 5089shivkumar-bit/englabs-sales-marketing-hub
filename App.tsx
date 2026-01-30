@@ -161,6 +161,9 @@ const App: React.FC = () => {
           return { zone, count: zoneCustomers.length, revenue: totalRevenue };
         });
 
+        const openEnquiries = expos.filter(e => String(e.status).toLowerCase().includes('hot') || String(e.status).toLowerCase().includes('open')).length;
+        const closedEnquiries = expos.filter(e => String(e.status).toLowerCase().includes('close')).length;
+
         return (
           <div className="space-y-8 animate-in fade-in duration-500">
             <div className="flex items-center justify-between">
@@ -187,6 +190,45 @@ const App: React.FC = () => {
                   </div>
                 </div>
               ))}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm relative overflow-hidden">
+                <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">Sales Funnel Efficiency</h4>
+                <div className="flex items-center space-x-12">
+                  <div className="text-center">
+                    <p className="text-4xl font-black text-blue-600">{openEnquiries}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Open Inquiries</p>
+                  </div>
+                  <div className="h-12 w-px bg-slate-100" />
+                  <div className="text-center">
+                    <p className="text-4xl font-black text-emerald-600">{closedEnquiries}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Converted</p>
+                  </div>
+                  <div className="flex-1">
+                    <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden flex">
+                      <div className="h-full bg-blue-500" style={{ width: `${(openEnquiries / (openEnquiries + closedEnquiries || 1)) * 100}%` }} />
+                      <div className="h-full bg-emerald-500" style={{ width: `${(closedEnquiries / (openEnquiries + closedEnquiries || 1)) * 100}%` }} />
+                    </div>
+                    <p className="text-[9px] font-bold text-slate-400 mt-2 text-right">Conversion Rate: {((closedEnquiries / (openEnquiries + closedEnquiries || 1)) * 100).toFixed(0)}%</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+                <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">Revenue Performance (Cr)</h4>
+                <div className="flex items-end space-x-4 h-24">
+                  {zonalStats.map(s => (
+                    <div key={s.zone} className="flex-1 flex flex-col items-center group">
+                      <div
+                        className="w-full bg-blue-100 rounded-lg group-hover:bg-blue-600 transition-all duration-500"
+                        style={{ height: `${(s.revenue / Math.max(...zonalStats.map(z => z.revenue), 1)) * 100}%` }}
+                      />
+                      <span className="text-[8px] font-black text-slate-300 uppercase mt-2">{s.zone[0]}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="bg-slate-900 rounded-[2.5rem] p-12 text-white relative overflow-hidden shadow-2xl">
