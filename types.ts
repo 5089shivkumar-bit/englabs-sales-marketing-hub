@@ -115,6 +115,8 @@ export interface Customer {
   contacts: ContactPerson[];
   pricingHistory: PricingRecord[];
   status?: 'Open' | 'Closed';
+  enquiryNo?: string;
+  lastDate?: string;
   lastModifiedBy?: string; // Audit field
   updatedAt?: string; // Audit field
 }

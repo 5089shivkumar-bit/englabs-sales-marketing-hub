@@ -59,7 +59,9 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
     contactEmail: '',
     areaSector: '',
     pincode: '',
-    status: 'Open'
+    status: 'Open',
+    enquiryNo: '',
+    lastDate: ''
   });
 
   const customerFields = [
@@ -114,7 +116,9 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
       areaSector: customer.areaSector || '',
       pincode: customer.pincode || '',
       // @ts-ignore
-      status: customer.status || 'Open'
+      status: customer.status || 'Open',
+      enquiryNo: customer.enquiryNo || '',
+      lastDate: customer.lastDate || ''
     });
     setShowAddModal(true);
   };
@@ -157,6 +161,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
         pincode: formCust.pincode,
         // @ts-ignore
         status: formCust.status,
+        enquiryNo: formCust.enquiryNo,
+        lastDate: formCust.lastDate,
         lastModifiedBy: currentUser.name,
         updatedAt: timestamp,
         contacts: editingCustomer.contacts.length > 0
@@ -189,6 +195,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
         industry: formCust.industry || 'Manufacturing',
         // @ts-ignore
         status: formCust.status,
+        enquiryNo: formCust.enquiryNo,
+        lastDate: formCust.lastDate,
         contacts: formCust.contactName ? [{
           id: `cp-${Date.now()}`,
           name: formCust.contactName,
@@ -651,6 +659,14 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                       <option value="Open">Open</option>
                       <option value="Closed">Closed</option>
                     </select>
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Enquiry No.</label>
+                    <input type="text" value={formCust.enquiryNo} onChange={e => setFormCust({ ...formCust, enquiryNo: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="e.g. ENQ-2024-001" />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Last Date</label>
+                    <input type="date" value={formCust.lastDate} onChange={e => setFormCust({ ...formCust, lastDate: e.target.value })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" />
                   </div>
                 </div>
               </div>

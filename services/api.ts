@@ -91,6 +91,8 @@ export const api = {
                     company_size: customer.companySize,
                     coords: customer.coords,
                     status: customer.status,
+                    enquiry_no: customer.enquiryNo,
+                    last_date: customer.lastDate,
                     last_modified_by: customer.lastModifiedBy,
                     updated_at: new Date().toISOString()
                 })
@@ -131,6 +133,8 @@ export const api = {
                     company_size: customer.companySize,
                     coords: customer.coords,
                     status: customer.status,
+                    enquiry_no: customer.enquiryNo,
+                    last_date: customer.lastDate,
                     last_modified_by: customer.lastModifiedBy,
                     updated_at: new Date().toISOString()
                 })
