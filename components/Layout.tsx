@@ -105,7 +105,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="h-screen bg-slate-50 flex overflow-hidden">
       {isSidebarOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
@@ -114,11 +114,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
       )}
 
       <aside className={`
-        fixed lg:static inset-y-0 left-0 z-50 bg-slate-900 text-white transform transition-all duration-300 ease-in-out
+        fixed lg:sticky inset-y-0 left-0 z-50 bg-slate-900 text-white transform transition-all duration-300 ease-in-out h-screen
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         ${isCollapsed ? 'lg:w-20' : 'lg:w-64'}
       `}>
-        <div className="h-full flex flex-col p-4 relative">
+        <div className="h-full flex flex-col p-4 relative overflow-hidden">
           {/* Toggle Button */}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
@@ -161,7 +161,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
                 <>
                   <p className="text-xs text-slate-500 uppercase font-bold tracking-tight mb-1">System Control</p>
                   <div className="flex items-center text-blue-400 text-xs font-bold">
-                    <UserCheck size={12} className="mr-1.5" /> Registry Verified
+                    <UserCheck size={12} className="mr-1.5" />Registry Verified
                   </div>
                 </>
               )}
@@ -177,8 +177,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="h-16 bg-white border-b border-slate-200 px-4 lg:px-8 flex items-center justify-between sticky top-0 z-30">
+      <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        <header className="h-16 bg-white border-b border-slate-200 px-4 lg:px-8 flex items-center justify-between flex-shrink-0 z-30">
           <div className="flex items-center space-x-4">
             <button
               className="lg:hidden p-2 hover:bg-slate-100 rounded-lg text-slate-600"

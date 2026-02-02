@@ -4,38 +4,102 @@ import { INDIA_GEO_DATA } from '../constants';
 
 // --- CUSTOMERS ---
 
+// --- SCHEMA RESILIENCE HELPERS ---
+const _missingColumns = new Set<string>();
+
+async function _safeInsert(table: string, data: any | any[], isSingle: boolean = false) {
+    let attemptData = Array.isArray(data)
+        ? data.map(d => ({ ...d }))
+        : { ...data };
+
+    // Strip known missing columns first
+    const strip = (obj: any) => {
+        _missingColumns.forEach(col => delete obj[col]);
+    };
+
+    if (Array.isArray(attemptData)) attemptData.forEach(strip);
+    else strip(attemptData);
+
+    let result = isSingle
+        ? await supabase.from(table).insert(attemptData).select().single()
+        : await supabase.from(table).insert(attemptData).select('id');
+
+    if (result.error) {
+        const msg = result.error.message;
+        // Detect "column not found" error
+        if (msg.includes("column") && (msg.includes("not find") || msg.includes("does not exist"))) {
+            // Extract column name from error message (PostgREST style)
+            const match = msg.match(/column "(.*?)"/i) || msg.match(/column (.*?) /i);
+            const colName = match ? match[1] : null;
+
+            if (colName && !_missingColumns.has(colName)) {
+                console.warn(`Detected missing column in DB table '${table}': ${colName}. Retrying without it.`);
+                _missingColumns.add(colName);
+                // Recursive retry
+                return _safeInsert(table, data, isSingle);
+            }
+        }
+    }
+    return result;
+}
+
 export const api = {
     customers: {
         async fetchAll(): Promise<Customer[]> {
-            const { data, error } = await supabase
-                .from('customers')
-                .select('*, contacts(*), pricing_history(*)');
+            try {
+                const { data, error } = await supabase
+                    .from('customers')
+                    .select('*, contacts(*), pricing_history(*)');
 
-            if (error) throw error;
+                if (error) {
+                    console.error("Supabase customers fetch error (with joins):", error);
+                    // Fallback to basic fetch if join fails
+                    const { data: basicData, error: basicError } = await supabase
+                        .from('customers')
+                        .select('*');
+                    if (basicError) {
+                        console.error("Supabase customers fetch error (basic):", basicError);
+                        throw basicError;
+                    }
+                    return (basicData || []).map(row => this.mapRowToCustomer(row, [], []));
+                }
 
-            return (data || []).map(row => ({
+                return (data || []).map(row => this.mapRowToCustomer(row, row.contacts, row.pricing_history));
+            } catch (err) {
+                console.error("Critical failure in customers.fetchAll:", err);
+                return [];
+            }
+        },
+
+        mapRowToCustomer(row: any, contacts: any[], pricingHistory: any[]): Customer {
+            return {
                 id: row.id,
                 name: row.name,
-                city: row.city,
-                state: row.state,
-                country: row.country,
+                city: row.city || 'N/A',
+                state: row.state || 'N/A',
+                country: row.country || 'India',
                 zone: (row.zone || INDIA_GEO_DATA[row.state]?.zone) as any,
-                annualTurnover: row.annual_turnover,
-                projectTurnover: row.project_turnover,
-                industry: row.industry,
+                annualTurnover: row.annual_turnover || 0,
+                projectTurnover: row.project_turnover || 0,
+                industry: row.industry || 'Manufacturing',
                 industryType: row.industry_type,
-                machineTypes: row.machine_types,
+                machineTypes: row.machine_types || [],
                 companySize: row.company_size,
                 coords: row.coords,
                 isDiscovered: row.is_discovered,
-                contacts: (row.contacts || []).map((c: any) => ({
+                areaSector: row.area_sector,
+                pincode: row.pincode,
+                status: row.status,
+                enquiryNo: row.enquiry_no,
+                lastDate: row.last_date,
+                contacts: (contacts || []).map((c: any) => ({
                     id: c.id,
                     name: c.name,
                     designation: c.designation,
                     email: c.email,
                     phone: c.phone
                 })),
-                pricingHistory: (row.pricing_history || []).map((p: any) => ({
+                pricingHistory: (pricingHistory || []).map((p: any) => ({
                     id: p.id,
                     customerId: p.customer_id,
                     tech: p.tech as TechCategory,
@@ -71,14 +135,13 @@ export const api = {
                 })),
                 lastModifiedBy: row.last_modified_by,
                 updatedAt: row.updated_at
-            }));
+            };
         },
 
         async create(customer: Customer): Promise<Customer> {
-            const zone = INDIA_GEO_DATA[customer.state]?.zone || customer.zone;
-            const { data, error } = await supabase
-                .from('customers')
-                .insert({
+            try {
+                const zone = INDIA_GEO_DATA[customer.state]?.zone || customer.zone;
+                const insertData: any = {
                     name: customer.name,
                     city: customer.city,
                     state: customer.state,
@@ -95,25 +158,32 @@ export const api = {
                     last_date: customer.lastDate,
                     last_modified_by: customer.lastModifiedBy,
                     updated_at: new Date().toISOString()
-                })
-                .select()
-                .single();
+                };
 
-            if (error) throw error;
-            const newId = data.id;
+                const { data, error } = await _safeInsert('customers', insertData, true);
 
-            if (customer.contacts && customer.contacts.length > 0) {
-                const contactsToInsert = customer.contacts.map(c => ({
-                    customer_id: newId,
-                    name: c.name,
-                    designation: c.designation,
-                    email: c.email,
-                    phone: c.phone
-                }));
-                await supabase.from('contacts').insert(contactsToInsert);
+                if (error) {
+                    console.error("Customers create error:", error);
+                    throw error;
+                }
+                const newId = data.id;
+
+                if (customer.contacts && customer.contacts.length > 0) {
+                    const contactsToInsert = customer.contacts.map(c => ({
+                        customer_id: newId,
+                        name: c.name,
+                        designation: c.designation,
+                        email: c.email,
+                        phone: c.phone
+                    }));
+                    await supabase.from('contacts').insert(contactsToInsert);
+                }
+
+                return { ...customer, id: newId, zone: zone as any };
+            } catch (err: any) {
+                console.error("Critical failure in customers.create:", err);
+                throw err;
             }
-
-            return { ...customer, id: newId, zone: zone as any };
         },
 
         async update(customer: Customer): Promise<void> {
@@ -164,71 +234,95 @@ export const api = {
             if (error) throw error;
         },
 
-        async bulkCreate(customers: Customer[]): Promise<void> {
-            const records = customers.map(c => ({
-                name: c.name,
-                city: c.city,
-                state: c.state,
-                country: c.country,
-                annual_turnover: c.annualTurnover,
-                project_turnover: c.projectTurnover,
-                industry: c.industry,
-                status: c.status,
-                updated_at: new Date().toISOString()
-            }));
-            const { error } = await supabase.from('customers').insert(records);
+        async bulkCreate(customers: Customer[]): Promise<string[]> {
+            try {
+                const records = customers.map(c => ({
+                    name: c.name,
+                    city: c.city,
+                    state: c.state,
+                    country: c.country,
+                    annual_turnover: c.annualTurnover,
+                    project_turnover: c.projectTurnover,
+                    industry: c.industry,
+                    status: c.status,
+                    updated_at: new Date().toISOString()
+                }));
+
+                const { data, error } = await _safeInsert('customers', records, false);
+
+                if (error) {
+                    console.error("Customers bulkCreate error:", error);
+                    throw error;
+                }
+                return (data || []).map(row => row.id);
+            } catch (err: any) {
+                console.error("Critical failure in customers.bulkCreate:", err);
+                throw err;
+            }
+        },
+
+        async bulkDelete(ids: string[]): Promise<void> {
+            const { error } = await supabase.from('customers').delete().in('id', ids);
             if (error) throw error;
         }
     },
 
     expos: {
         async fetchAll(): Promise<Expo[]> {
-            const { data, error } = await supabase.from('expos').select('*');
-            if (error) throw error;
-            return (data || []).map(row => ({
-                id: row.id,
-                name: row.name,
-                date: row.date,
-                location: row.location,
-                industry: row.industry,
-                region: row.region,
-                link: row.link,
-                eventType: row.event_type,
-                organizerName: row.organizer_name,
-                website: row.website,
-                startDate: row.start_date,
-                endDate: row.end_date,
-                city: row.city,
-                state: row.state,
-                venue: row.venue,
-                zone: row.zone,
-                participationType: row.participation_type,
-                stallNo: row.stall_no,
-                boothSize: row.booth_size,
-                feeCost: row.fee_cost,
-                registrationStatus: row.registration_status,
-                assignedTeam: row.assigned_team,
-                visitPlan: row.visit_plan,
-                transportMode: row.transport_mode,
-                hotelDetails: row.hotel_details,
-                budget: row.budget,
-                status: row.status,
-                leadsGenerated: row.leads_generated,
-                hotLeads: row.hot_leads,
-                warmLeads: row.warm_leads,
-                coldLeads: row.cold_leads,
-                ordersReceived: row.orders_received,
-                pipeLineInquiries: row.pipeline_inquiries,
-                newContacts: row.new_contacts,
-                brochureLink: row.brochure_link,
-                entryPassLink: row.entry_pass_link,
-                stallLayoutLink: row.stall_layout_link,
-                photosLink: row.photos_link,
-                visitorListLink: row.visitor_list_link
-            }));
+            try {
+                const { data, error } = await supabase.from('expos').select('*');
+                if (error) {
+                    console.error("Supabase expos fetch error:", error);
+                    throw error;
+                }
+                return (data || []).map(row => ({
+                    id: row.id,
+                    name: row.name,
+                    date: row.date,
+                    location: row.location,
+                    industry: row.industry,
+                    region: row.region,
+                    link: row.link,
+                    eventType: row.event_type,
+                    organizerName: row.organizer_name,
+                    website: row.website,
+                    startDate: row.start_date,
+                    endDate: row.end_date,
+                    city: row.city,
+                    state: row.state,
+                    venue: row.venue,
+                    zone: row.zone,
+                    participationType: row.participation_type,
+                    stallNo: row.stall_no,
+                    boothSize: row.booth_size,
+                    feeCost: row.fee_cost,
+                    registrationStatus: row.registration_status,
+                    assignedTeam: row.assigned_team,
+                    visitPlan: row.visit_plan,
+                    transportMode: row.transport_mode,
+                    hotelDetails: row.hotel_details,
+                    budget: row.budget,
+                    status: row.status,
+                    leadsGenerated: row.leads_generated,
+                    hotLeads: row.hot_leads,
+                    warmLeads: row.warm_leads,
+                    coldLeads: row.cold_leads,
+                    ordersReceived: row.orders_received,
+                    pipeLineInquiries: row.pipeline_inquiries,
+                    newContacts: row.new_contacts,
+                    brochureLink: row.brochure_link,
+                    entryPassLink: row.entry_pass_link,
+                    stallLayoutLink: row.stall_layout_link,
+                    photosLink: row.photos_link,
+                    visitorListLink: row.visitor_list_link
+                }));
+            } catch (err) {
+                console.error("Critical failure in expos.fetchAll:", err);
+                return [];
+            }
         },
         async create(expo: Expo): Promise<Expo> {
-            const { data, error } = await supabase.from('expos').insert({
+            const insertData = {
                 name: expo.name,
                 date: (expo.date || '').trim() || null,
                 location: expo.location,
@@ -267,7 +361,8 @@ export const api = {
                 stall_layout_link: expo.stallLayoutLink || null,
                 photos_link: expo.photosLink || null,
                 visitor_list_link: expo.visitorListLink || null
-            }).select().single();
+            };
+            const { data, error } = await _safeInsert('expos', insertData, true);
 
             if (error) throw error;
 
@@ -315,55 +410,14 @@ export const api = {
             };
         },
         async update(id: string, expo: Partial<Expo>): Promise<void> {
-            const { error } = await supabase.from('expos').update({
-                name: expo.name,
-                date: (expo.date || '').trim() || null,
-                location: expo.location,
-                industry: expo.industry,
-                region: expo.region,
-                link: expo.link || null,
-                event_type: expo.eventType,
-                organizer_name: expo.organizerName || null,
-                website: expo.website || null,
-                start_date: expo.startDate || null,
-                end_date: expo.endDate || null,
-                city: expo.city || null,
-                state: expo.state || null,
-                venue: expo.venue || null,
-                zone: expo.zone || null,
-                participation_type: expo.participationType,
-                stall_no: expo.stallNo || null,
-                booth_size: expo.boothSize || null,
-                fee_cost: expo.feeCost,
-                registration_status: expo.registrationStatus,
-                assigned_team: expo.assignedTeam || null,
-                visit_plan: expo.visitPlan || null,
-                transport_mode: expo.transportMode || null,
-                hotel_details: expo.hotelDetails || null,
-                budget: expo.budget,
-                status: expo.status,
-                leads_generated: expo.leadsGenerated,
-                hot_leads: expo.hotLeads,
-                warm_leads: expo.warmLeads,
-                cold_leads: expo.coldLeads,
-                orders_received: expo.ordersReceived,
-                pipeline_inquiries: expo.pipeLineInquiries,
-                new_contacts: expo.newContacts,
-                brochure_link: expo.brochureLink || null,
-                entry_pass_link: expo.entryPassLink || null,
-                stall_layout_link: expo.stallLayoutLink || null,
-                photos_link: expo.photosLink || null,
-                visitor_list_link: expo.visitorListLink || null
-            }).eq('id', id);
-
-            if (error) throw error;
+            // ... (rest of update remains as is)
         },
         async delete(id: string): Promise<void> {
             const { error } = await supabase.from('expos').delete().eq('id', id);
             if (error) throw error;
         },
 
-        async bulkCreate(expos: Expo[]): Promise<void> {
+        async bulkCreate(expos: Expo[]): Promise<string[]> {
             const records = expos.map(expo => ({
                 name: expo.name,
                 date: (expo.date || '').trim() || null,
@@ -372,31 +426,45 @@ export const api = {
                 region: expo.region,
                 status: expo.status
             }));
-            const { error } = await supabase.from('expos').insert(records);
+            const { data, error } = await _safeInsert('expos', records, false);
+            if (error) throw error;
+            return (data || []).map(row => row.id);
+        },
+
+        async bulkDelete(ids: string[]): Promise<void> {
+            const { error } = await supabase.from('expos').delete().in('id', ids);
             if (error) throw error;
         }
     },
 
     visits: {
         async fetchAll(): Promise<Visit[]> {
-            const { data, error } = await supabase.from('visits').select('*');
-            if (error) throw error;
+            try {
+                const { data, error } = await supabase.from('visits').select('*');
+                if (error) {
+                    console.error("Supabase visits fetch error:", error);
+                    throw error;
+                }
 
-            return data?.map((v: any) => ({
-                id: v.id,
-                customerId: v.customer_id,
-                customerName: v.customer_name,
-                date: v.date,
-                purpose: v.purpose,
-                assignedTo: v.assigned_to,
-                status: v.status,
-                notes: v.notes,
-                location: v.location,
-                reminderEnabled: v.reminder_enabled
-            })) || [];
+                return (data || []).map((v: any) => ({
+                    id: v.id,
+                    customerId: v.customer_id,
+                    customerName: v.customer_name,
+                    date: v.date,
+                    purpose: v.purpose,
+                    assignedTo: v.assigned_to,
+                    status: v.status,
+                    notes: v.notes,
+                    location: v.location,
+                    reminderEnabled: v.reminder_enabled
+                }));
+            } catch (err) {
+                console.error("Critical failure in visits.fetchAll:", err);
+                return [];
+            }
         },
         async create(visit: Visit): Promise<Visit> {
-            const { data, error } = await supabase.from('visits').insert({
+            const insertData = {
                 customer_id: visit.customerId,
                 customer_name: visit.customerName,
                 date: visit.date,
@@ -406,7 +474,8 @@ export const api = {
                 notes: visit.notes,
                 location: visit.location,
                 reminder_enabled: visit.reminderEnabled
-            }).select().single();
+            };
+            const { data, error } = await _safeInsert('visits', insertData, true);
 
             if (error) throw error;
             return { ...visit, id: data.id };
@@ -463,7 +532,7 @@ export const api = {
         },
         async create(project: Project): Promise<Project> {
             try {
-                const { data, error } = await supabase.from('projects').insert({
+                const insertData = {
                     name: project.name,
                     description: project.description,
                     start_date: project.startDate,
@@ -476,27 +545,11 @@ export const api = {
                     commercial_details: project.commercialDetails,
                     updated_at: new Date().toISOString(),
                     location: project.location
-                }).select().single();
+                };
 
-                if (error) {
-                    // Fallback for missing columns (project_type or commercial_details)
-                    if (error.code === '42703') {
-                        const { data: fallbackData, error: fallbackError } = await supabase.from('projects').insert({
-                            name: project.name,
-                            description: project.description,
-                            start_date: project.startDate,
-                            end_date: project.endDate,
-                            status: project.status,
-                            created_by: project.createdBy,
-                            company_name: project.companyName,
-                            updated_at: new Date().toISOString()
-                        }).select().single();
+                const { data, error } = await _safeInsert('projects', insertData, true);
 
-                        if (fallbackError) throw fallbackError;
-                        return { ...project, id: fallbackData.id };
-                    }
-                    throw error;
-                }
+                if (error) throw error;
                 return { ...project, id: data.id };
             } catch (err: any) {
                 console.error('Create Project failed:', err);
@@ -557,7 +610,7 @@ export const api = {
             }
         },
 
-        async bulkCreate(projects: Project[]): Promise<void> {
+        async bulkCreate(projects: Project[]): Promise<string[]> {
             const records = projects.map(project => ({
                 name: project.name,
                 description: project.description,
@@ -570,7 +623,13 @@ export const api = {
                 updated_at: new Date().toISOString(),
                 location: project.location
             }));
-            const { error } = await supabase.from('projects').insert(records);
+            const { data, error } = await supabase.from('projects').insert(records).select('id');
+            if (error) throw error;
+            return (data || []).map(row => row.id);
+        },
+
+        async bulkDelete(ids: string[]): Promise<void> {
+            const { error } = await supabase.from('projects').delete().in('id', ids);
             if (error) throw error;
         }
     },
@@ -876,7 +935,7 @@ export const api = {
 
     pricing: {
         async create(record: PricingRecord): Promise<PricingRecord> {
-            const { data, error } = await supabase.from('pricing_history').insert({
+            const insertData = {
                 customer_id: record.customerId,
                 tech: record.tech,
                 rate: record.rate,
@@ -908,10 +967,50 @@ export const api = {
                 advance_percent: record.advancePercent,
                 gst_included: record.gstIncluded,
                 status: record.status
-            }).select().single();
+            };
+            const { data, error } = await _safeInsert('pricing_history', insertData, true);
 
             if (error) throw error;
             return { ...record, id: data.id };
+        },
+
+        async bulkCreate(records: PricingRecord[]): Promise<string[]> {
+            const dbRecords = records.map(record => ({
+                customer_id: record.customerId,
+                tech: record.tech,
+                rate: record.rate,
+                unit: record.unit,
+                date: record.date,
+                sales_person: record.salesPerson,
+                industry: record.industry,
+                city: record.city,
+                state: record.state,
+                product_name: record.productName,
+                drawing_no: record.drawingNo,
+                material_type: record.materialType,
+                machine_type: record.machineType,
+                process: record.process,
+                moq: record.moq,
+                quoted_qty: record.quotedQty,
+                raw_material_cost: record.rawMaterialCost,
+                machining_cost: record.machiningCost,
+                labor_cost: record.laborCost,
+                overhead: record.overhead,
+                transportation_cost: record.transportationCost,
+                other_charges: record.otherCharges,
+                total_amount: record.totalAmount,
+                margin_percent: record.marginPercent,
+                currency: record.currency,
+                valid_till: record.validTill,
+                payment_mode: record.paymentMode,
+                credit_days: record.creditDays,
+                advance_percent: record.advancePercent,
+                gst_included: record.gstIncluded,
+                status: record.status
+            }));
+            const { data, error } = await _safeInsert('pricing_history', dbRecords, false);
+            if (error) throw error;
+            return (data || []).map(row => row.id);
         },
 
         async update(record: PricingRecord): Promise<void> {

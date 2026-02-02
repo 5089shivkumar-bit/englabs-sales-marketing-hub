@@ -467,8 +467,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
 
         {selectedCustomer && (
           <div className="xl:col-span-4 space-y-6 animate-in slide-in-from-right duration-300">
-            <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-2xl overflow-hidden sticky top-20">
-              <div className="p-10 bg-slate-900 text-white relative">
+            <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-2xl sticky top-4 max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col">
+              <div className="p-10 bg-slate-900 text-white relative flex-shrink-0">
                 <button className="absolute top-8 right-8 p-2.5 hover:bg-white/10 rounded-full transition-colors" onClick={() => setSelectedCustomer(null)}>
                   <X size={24} />
                 </button>
@@ -479,7 +479,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                 <p className="text-blue-400 text-[11px] uppercase tracking-[0.2em] font-black">{selectedCustomer.industry}</p>
               </div>
 
-              <div className="p-10 space-y-10">
+              <div className="p-10 space-y-10 overflow-y-auto flex-1">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100">
                     <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Hub Hub</p>

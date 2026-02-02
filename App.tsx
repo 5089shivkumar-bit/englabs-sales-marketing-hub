@@ -32,20 +32,30 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
+
+      // Load datasets independently so one failure doesn't block the whole app
       try {
-        const [fetchedCustomers, fetchedExpos, fetchedVisits] = await Promise.all([
-          api.customers.fetchAll(),
-          api.expos.fetchAll(),
-          api.visits.fetchAll()
-        ]);
+        const fetchedCustomers = await api.customers.fetchAll();
         setCustomers(fetchedCustomers);
+      } catch (error) {
+        console.error("Failed to fetch customers:", error);
+      }
+
+      try {
+        const fetchedExpos = await api.expos.fetchAll();
         setExpos(fetchedExpos);
+      } catch (error) {
+        console.error("Failed to fetch expos:", error);
+      }
+
+      try {
+        const fetchedVisits = await api.visits.fetchAll();
         setVisits(fetchedVisits);
       } catch (error) {
-        console.error("Failed to fetch data:", error);
-      } finally {
-        setLoading(false);
+        console.error("Failed to fetch visits:", error);
       }
+
+      setLoading(false);
     };
     loadData();
   }, []);
