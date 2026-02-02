@@ -72,7 +72,9 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
   const [showSqlRepair, setShowSqlRepair] = useState(false);
 
   const SQL_REPAIR_SCRIPT = `-- RUN THIS IN SUPABASE SQL EDITOR TO FIX SCHEMA ERRORS
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+-- Fix status constraint to support both old and new values
+ALTER TABLE customers DROP CONSTRAINT IF EXISTS customers_status_check;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Open';
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS area_sector TEXT;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS pincode TEXT;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS enquiry_no TEXT;
@@ -82,44 +84,100 @@ ALTER TABLE customers ADD COLUMN IF NOT EXISTS machine_types JSONB DEFAULT '[]';
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS company_size TEXT;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS coords JSONB;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS is_discovered BOOLEAN DEFAULT false;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS industrial_hub TEXT;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS zone TEXT;
+ALTER TABLE customers ADD CONSTRAINT customers_status_check 
+CHECK (status IN ('active', 'inactive', 'prospective', 'lead', 'churned', 'Open', 'Closed'));
 
--- Add check constraint for status if column exists
-DO $$ 
-BEGIN 
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'customers_status_check') THEN
-        ALTER TABLE customers ADD CONSTRAINT customers_status_check 
-        CHECK (status IN ('active', 'inactive', 'prospective', 'lead', 'churned'));
-    END IF;
-END $$;`;
+-- Fix projects table schema
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS location TEXT;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'IN_HOUSE';
+ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_type_check;
+ALTER TABLE projects ADD CONSTRAINT projects_type_check 
+CHECK (type IN ('IN_HOUSE', 'VENDOR'));
+ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_status_check;
+ALTER TABLE projects ADD CONSTRAINT projects_status_check 
+CHECK (status IN ('Active', 'Completed', 'On Hold'));`;
 
   const handleDeleteLog = async (log: any) => {
     if (!confirm(`Are you sure you want to delete this sync record? This will remove ${log.count} records from the database.`)) {
       return;
     }
 
+    let deletedCustomerIds: string[] = [];
+    let deletedExpoIds: string[] = [];
+    let deletedProjectIds: string[] = [];
+    let errors: string[] = [];
+
     try {
       if (log.recordIds) {
+        // Delete customers (API call before UI update)
         if (log.recordIds.customers && log.recordIds.customers.length > 0) {
-          const idsToRemove = new Set(log.recordIds.customers);
-          setCustomers(prev => prev.filter(c => !idsToRemove.has(c.id)));
-          await api.customers.bulkDelete(log.recordIds.customers);
+          try {
+            await api.customers.bulkDelete(log.recordIds.customers);
+            deletedCustomerIds = log.recordIds.customers;
+          } catch (err: any) {
+            console.error("Failed to delete customers:", err);
+            errors.push(`Customers: ${err.message || 'Unknown error'}`);
+          }
         }
+
+        // Delete expos
         if (log.recordIds.expos && log.recordIds.expos.length > 0) {
-          const idsToRemove = new Set(log.recordIds.expos);
-          setExpos(prev => prev.filter(e => !idsToRemove.has(e.id)));
-          await api.expos.bulkDelete(log.recordIds.expos);
+          try {
+            await api.expos.bulkDelete(log.recordIds.expos);
+            deletedExpoIds = log.recordIds.expos;
+          } catch (err: any) {
+            console.error("Failed to delete expos:", err);
+            errors.push(`Expos: ${err.message || 'Unknown error'}`);
+          }
         }
+
+        // Delete projects
         if (log.recordIds.projects && log.recordIds.projects.length > 0) {
-          await api.projects.bulkDelete(log.recordIds.projects);
+          try {
+            await api.projects.bulkDelete(log.recordIds.projects);
+            deletedProjectIds = log.recordIds.projects;
+          } catch (err: any) {
+            console.error("Failed to delete projects:", err);
+            errors.push(`Projects: ${err.message || 'Unknown error'}`);
+          }
         }
       }
 
+      // Update UI state for deleted items (filter by UUID pattern to only remove valid IDs)
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+      if (deletedCustomerIds.length > 0) {
+        const validIds = deletedCustomerIds.filter(id => uuidRegex.test(id));
+        if (validIds.length > 0) {
+          const idsToRemove = new Set(validIds);
+          setCustomers(prev => prev.filter(c => !idsToRemove.has(c.id)));
+        }
+      }
+      if (deletedExpoIds.length > 0) {
+        const validIds = deletedExpoIds.filter(id => uuidRegex.test(id));
+        if (validIds.length > 0) {
+          const idsToRemove = new Set(validIds);
+          setExpos(prev => prev.filter(e => !idsToRemove.has(e.id)));
+        }
+      }
+
+      // Always remove the log entry (even if database deletion had issues or no valid UUIDs)
       const newLogs = logs.filter((l: any) => l.id !== log.id);
       setLogs(newLogs);
       localStorage.setItem('enging_import_logs', JSON.stringify(newLogs));
+
+      if (errors.length > 0) {
+        alert(`Log entry removed. Some database cleanup may have been skipped:\n${errors.join('\n')}`);
+      }
     } catch (err) {
       console.error("Deletion failed", err);
-      alert("Failed to delete some records from the database. They might have been partially removed.");
+      // Still try to remove the log entry even if there were errors
+      const newLogs = logs.filter((l: any) => l.id !== log.id);
+      setLogs(newLogs);
+      localStorage.setItem('enging_import_logs', JSON.stringify(newLogs));
+      alert("Log entry removed, but there were some errors cleaning up database records.");
     }
   };
 
@@ -349,6 +407,116 @@ END $$;`;
         setDbError(e.message);
       }
     }
+    else if (importType === 'projects') {
+      // Helper function to parse various date formats
+      const parseProjectDate = (dateValue: any): string => {
+        if (!dateValue) {
+          // Return simple YYYY-MM-DD format
+          const today = new Date();
+          const year = today.getFullYear();
+          const month = String(today.getMonth() + 1).padStart(2, '0');
+          const day = String(today.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        }
+
+        // If it's already a string, try to parse it
+        if (typeof dateValue === 'string') {
+          const parsed = new Date(dateValue);
+          if (!isNaN(parsed.getTime())) {
+            const year = parsed.getFullYear();
+            const month = String(parsed.getMonth() + 1).padStart(2, '0');
+            const day = String(parsed.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+          }
+        }
+
+        // If it's a Date object
+        if (dateValue instanceof Date && !isNaN(dateValue.getTime())) {
+          const year = dateValue.getFullYear();
+          const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+          const day = String(dateValue.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        }
+
+        // If it's an Excel serial number (days since 1900-01-01)
+        if (typeof dateValue === 'number') {
+          // Excel incorrectly treats 1900 as a leap year, so we adjust
+          const excelEpoch = new Date(1900, 0, 1);
+          const daysOffset = dateValue > 59 ? dateValue - 2 : dateValue - 1;
+          const parsed = new Date(excelEpoch.getTime() + daysOffset * 86400 * 1000);
+          if (!isNaN(parsed.getTime())) {
+            const year = parsed.getFullYear();
+            const month = String(parsed.getMonth() + 1).padStart(2, '0');
+            const day = String(parsed.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+          }
+        }
+
+        // Fallback to today's date
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+
+      const importedProjects: Project[] = data.map(row => {
+        const projectType = String(row.type || 'IN_HOUSE').toUpperCase().includes('VENDOR')
+          ? ProjectType.VENDOR
+          : ProjectType.IN_HOUSE;
+
+        let projectStatus: ProjectStatus = 'Active';
+        const statusStr = String(row.status || 'Active').toLowerCase();
+        if (statusStr.includes('complet')) projectStatus = 'Completed';
+        else if (statusStr.includes('hold')) projectStatus = 'On Hold';
+
+        return {
+          id: `proj-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          name: String(row.name || '').trim(),
+          companyName: String(row.companyName || '').trim(),
+          description: String(row.description || '').trim(),
+          startDate: parseProjectDate(row.startDate),
+          endDate: parseProjectDate(row.endDate),
+          status: projectStatus,
+          type: projectType,
+          location: String(row.location || '').trim(),
+          createdBy: 'Excel Import',
+          updatedAt: new Date().toISOString()
+        };
+      }).filter(p => p.name.length > 0 && p.companyName.length > 0);
+
+      // Check for duplicates by name and company
+      const newProjects: Project[] = [];
+
+      importedProjects.forEach(importedProj => {
+        // For now, we'll add all projects (no duplicate checking for projects)
+        // You can add duplicate logic here if needed
+        newProjects.push(importedProj);
+      });
+
+      try {
+        let projectIds: string[] = [];
+
+        if (newProjects.length > 0) {
+          projectIds = await api.projects.bulkCreate(newProjects);
+        }
+
+        const totalProcessed = newProjects.length;
+        addLog(
+          `Projects Import: ${newProjects.length} new`,
+          totalProcessed,
+          'Success',
+          { projects: projectIds }
+        );
+
+        // Optionally: trigger a reload or update projects state if you have it
+        alert(`✅ Successfully imported ${totalProcessed} projects! You can now view them in Project Manager.`);
+      } catch (e: any) {
+        console.error('Bulk save projects failed', e);
+        addLog('Bulk Save Projects', importedProjects.length, 'Failed');
+        setDbError(e.message);
+      }
+    }
     else if (importType === 'pricing') {
       setCustomers(prev => {
         const next = [...prev];
@@ -541,10 +709,78 @@ END $$;`;
     localStorage.setItem('enging_import_logs', JSON.stringify(newLogs));
   };
 
-  const clearDatabase = () => {
-    if (confirm("Are you sure you want to clear all imported data? This will reset Mark-Eng to its initial state.")) {
+  const clearDatabase = async () => {
+    if (!confirm("Are you sure you want to clear ALL imported data? This will DELETE all customers, expos, and projects from the database permanently.")) {
+      return;
+    }
+
+    if (!confirm("⚠️ FINAL WARNING: This action CANNOT be undone. All data will be permanently deleted. Continue?")) {
+      return;
+    }
+
+    try {
+      // Show loading state
+      const statusMessage = "Deleting all data from database...";
+      console.log(statusMessage);
+
+      // Delete all data from Supabase tables (order matters due to foreign keys)
+      // First delete dependent tables
+      const { error: contactsError } = await api.customers.fetchAll().then(async () => {
+        // Delete all contacts
+        const { error } = await (await import('../services/supabaseClient')).supabase
+          .from('contacts')
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all (neq with impossible value)
+        return { error };
+      });
+      if (contactsError) console.warn("Error clearing contacts:", contactsError);
+
+      // Delete all pricing history
+      const { supabase } = await import('../services/supabaseClient');
+
+      const { error: pricingError } = await supabase
+        .from('pricing_history')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (pricingError) console.warn("Error clearing pricing_history:", pricingError);
+
+      // Delete all customers
+      const { error: customersError } = await supabase
+        .from('customers')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (customersError) console.warn("Error clearing customers:", customersError);
+
+      // Delete all expos
+      const { error: exposError } = await supabase
+        .from('expos')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (exposError) console.warn("Error clearing expos:", exposError);
+
+      // Delete all projects
+      const { error: projectsError } = await supabase
+        .from('projects')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (projectsError) console.warn("Error clearing projects:", projectsError);
+
+      // Clear local state
+      setCustomers([]);
+      setExpos([]);
+      setLogs([{ id: 1, action: 'Database Wiped', count: 'Full Reset', date: 'System', status: 'Success' }]);
+
+      // Clear localStorage
       localStorage.clear();
+      localStorage.setItem('enging_import_logs', JSON.stringify([
+        { id: 1, action: 'Database Wiped', count: 'Full Reset', date: 'System', status: 'Success' }
+      ]));
+
+      alert("✅ All data has been deleted from the database. The page will now reload.");
       window.location.reload();
+    } catch (err) {
+      console.error("Error clearing database:", err);
+      alert("There was an error clearing the database. Please try again or contact support.");
     }
   };
 

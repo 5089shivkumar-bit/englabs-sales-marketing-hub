@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ClipboardList, Archive, FileText, CheckCircle2, User as UserIcon, Building2, Calendar, Clock, X, Plus, LayoutGrid, List as ListIcon, MoreHorizontal, Trash2, Save, Search, FileDown, FileUp, Download, Upload } from 'lucide-react';
+import { ClipboardList, Archive, FileText, CheckCircle2, User as UserIcon, Building2, Calendar, Clock, X, Plus, LayoutGrid, List as ListIcon, MoreHorizontal, Trash2, Save, Search, FileDown, FileUp, Download, Upload, ChevronRight } from 'lucide-react';
 import { Project, ProjectStatus, ProjectType, User, Expense, Income, VendorDetails, Vendor, VendorType, CommercialDetails, ClientPayment, VendorPayment, ProjectDocument, DocumentCategory, DocumentTag, ActivityLog, ActivityType } from '../types';
 import { api } from '../services/api';
 import { dataService } from '../services/dataService';
@@ -32,6 +32,7 @@ export const ProjectDetailsView: React.FC = () => {
     const [vendors, setVendors] = useState<Vendor[]>([]);
     const [loadingVendors, setLoadingVendors] = useState(false);
     const [activeProjectType, setActiveProjectType] = useState<ProjectType>(ProjectType.IN_HOUSE);
+    const [expandedYears, setExpandedYears] = useState<Set<string>>(new Set());
 
     // Stats (calculated from ALL projects, not filtered)
     const stats = {
@@ -53,6 +54,33 @@ export const ProjectDetailsView: React.FC = () => {
         );
         return matchesType && matchesSearch;
     });
+
+    // Year-wise grouping (by start date year)
+    const projectsByYear = filteredProjects.reduce((acc, project) => {
+        const year = project.startDate ?
+            new Date(project.startDate).getFullYear().toString() :
+            'No Date';
+        if (!acc[year]) acc[year] = [];
+        acc[year].push(project);
+        return acc;
+    }, {} as Record<string, Project[]>);
+
+    const years = Object.keys(projectsByYear).sort((a, b) => {
+        if (b === 'No Date') return -1;
+        if (a === 'No Date') return 1;
+        return parseInt(b) - parseInt(a); // Descending order (2026, 2025, 2024...)
+    });
+
+    // Toggle year expansion
+    const toggleYear = (year: string) => {
+        const newExpanded = new Set(expandedYears);
+        if (newExpanded.has(year)) {
+            newExpanded.delete(year);
+        } else {
+            newExpanded.add(year);
+        }
+        setExpandedYears(newExpanded);
+    };
 
     // Form State
     const [form, setForm] = useState<{
@@ -1085,48 +1113,51 @@ export const ProjectDetailsView: React.FC = () => {
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Project Management</h2>
-                    <p className="text-slate-500 font-medium">Overview of active engineering projects.</p>
-                </div>
-
-                <div className="flex items-center space-x-3 w-full md:w-auto">
-
-                    {/* Search Bar - Moved to right side for cleaner layout next to controls */}
-                    <div className="relative group w-full md:w-64 lg:w-80">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={20} />
-                        <input
-                            type="text"
-                            placeholder="Search projects by name, company..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm w-full transition-all"
-                        />
+            {/* Sticky Header Section */}
+            <div className="sticky top-0 z-10 bg-slate-50 pb-4 -mx-8 px-8 pt-6 -mt-6">
+                {/* Header */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h2 className="text-3xl font-black text-slate-900 tracking-tight">Project Management</h2>
+                        <p className="text-slate-500 font-medium">Overview of active engineering projects.</p>
                     </div>
 
-                    <div className="flex bg-white rounded-xl p-1 border border-slate-200 shadow-sm shrink-0">
+                    <div className="flex items-center space-x-3 w-full md:w-auto">
+
+                        {/* Search Bar - Moved to right side for cleaner layout next to controls */}
+                        <div className="relative group w-full md:w-64 lg:w-80">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={20} />
+                            <input
+                                type="text"
+                                placeholder="Search projects by name, company..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm w-full transition-all"
+                            />
+                        </div>
+
+                        <div className="flex bg-white rounded-xl p-1 border border-slate-200 shadow-sm shrink-0">
+                            <button
+                                onClick={() => setViewMode('grid')}
+                                className={`p-2 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                            >
+                                <LayoutGrid size={18} />
+                            </button>
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                            >
+                                <ListIcon size={18} />
+                            </button>
+                        </div>
+
                         <button
-                            onClick={() => setViewMode('grid')}
-                            className={`p-2 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                            onClick={handleOpenCreate}
+                            className="flex items-center px-6 py-4 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 text-sm font-bold transition-all shadow-xl shadow-slate-500/20 active:scale-95 shrink-0"
                         >
-                            <LayoutGrid size={18} />
-                        </button>
-                        <button
-                            onClick={() => setViewMode('list')}
-                            className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                        >
-                            <ListIcon size={18} />
+                            <Plus size={18} className="mr-3 text-blue-400" /> New Project
                         </button>
                     </div>
-
-                    <button
-                        onClick={handleOpenCreate}
-                        className="flex items-center px-6 py-4 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 text-sm font-bold transition-all shadow-xl shadow-slate-500/20 active:scale-95 shrink-0"
-                    >
-                        <Plus size={18} className="mr-3 text-blue-400" /> New Project
-                    </button>
                 </div>
             </div>
 
@@ -1174,7 +1205,7 @@ export const ProjectDetailsView: React.FC = () => {
                 </button>
             </div>
 
-            {/* Content Switcher */}
+            {/* Year-wise Accordion Content */}
             {loading ? (
                 <div className="p-12 text-center text-slate-400">Loading projects...</div>
             ) : filteredProjects.length === 0 ? (
@@ -1187,156 +1218,207 @@ export const ProjectDetailsView: React.FC = () => {
                         {searchQuery ? `No matches for "${searchQuery}"` : "Initialize a new project using the button above."}
                     </p>
                 </div>
-            ) : viewMode === 'grid' ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {filteredProjects.map((project) => (
-                        <div
-                            key={project.id}
-                            onClick={() => handleOpenEdit(project)}
-                            className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm hover:shadow-lg transition-all group cursor-pointer relative overflow-hidden"
-                        >
-                            <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-slate-50 to-slate-100 rounded-bl-[2rem] -mr-4 -mt-4 transition-transform group-hover:scale-110`}></div>
-
-                            <div className="relative">
-                                <div className="flex justify-between items-start mb-6">
-                                    <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 shadow-sm">
-                                        <ClipboardList size={28} />
-                                    </div>
-                                    <div className="flex flex-col items-end gap-2">
-                                        <StatusBadge status={project.status} />
-                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${project.type === ProjectType.VENDOR ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
-                                            {project.type || ProjectType.IN_HOUSE}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <h3 className="text-xl font-black text-slate-900 mb-2 truncate" title={project.name}>{project.name}</h3>
-                                <p className="text-slate-500 text-sm leading-relaxed mb-6 line-clamp-2 h-10">
-                                    {project.description || 'No description provided.'}
-                                </p>
-
-                                <div className="space-y-3 pt-6 border-t border-slate-100">
-                                    <div className="flex items-center justify-between text-xs font-bold text-slate-400">
-                                        <div className="flex items-center">
-                                            <Building2 size={14} className="mr-2 text-slate-300" />
-                                            <span className="uppercase tracking-wider truncate">{project.companyName || 'Unknown Company'}</span>
-                                        </div>
-                                        {project.type === ProjectType.VENDOR && project.vendorDetails?.vendorName && (
-                                            <span className="text-[9px] text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 truncate max-w-[120px]">
-                                                {project.vendorDetails.vendorName}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center text-xs font-bold text-slate-400">
-                                            <Calendar size={14} className="mr-2 text-slate-300" />
-                                            <span>{project.startDate || 'N/A'}</span>
-                                        </div>
-                                        <div className="flex items-center text-xs font-bold text-slate-400">
-                                            <UserIcon size={14} className="mr-2 text-slate-300" />
-                                            <span>{project.createdBy}</span>
-                                        </div>
-                                    </div>
-
-                                    {project.type === ProjectType.VENDOR && (
-                                        <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-slate-50">
-                                            <div className="bg-slate-50 p-2 rounded-xl">
-                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Billing</p>
-                                                <p className="text-xs font-black text-slate-900">₹{project.commercialDetails?.client?.projectCost || 0}</p>
-                                            </div>
-                                            <div className="bg-slate-50 p-2 rounded-xl">
-                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Margin</p>
-                                                <p className={`text-xs font-black ${project.commercialDetails?.marginPercent && project.commercialDetails.marginPercent > 0 ? 'text-emerald-500' : 'text-amber-500'}`}>
-                                                    {project.commercialDetails?.marginPercent || 0}%
-                                                </p>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
             ) : (
-                <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
-                    <table className="w-full">
-                        <thead className="bg-slate-50 border-b border-slate-100">
-                            <tr>
-                                <th className="px-8 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Project Name</th>
-                                <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Client</th>
-                                <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Dates</th>
-                                <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Type</th>
-                                <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Financials</th>
-                                <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Owner</th>
-                                <th className="px-6 py-5 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {filteredProjects.map((project) => (
-                                <tr
-                                    key={project.id}
-                                    onClick={() => handleOpenEdit(project)}
-                                    className="hover:bg-slate-50/50 transition-colors cursor-pointer group"
+                <div className="space-y-4">
+                    {years.map((year) => {
+                        const yearProjects = projectsByYear[year];
+                        const yearStats = {
+                            total: yearProjects.length,
+                            active: yearProjects.filter(p => p.status === 'Active').length,
+                            closed: yearProjects.filter(p => p.status === 'Completed').length,
+                        };
+                        const isExpanded = expandedYears.has(year);
+
+                        return (
+                            <div key={year} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                                {/* Year Header - Clickable */}
+                                <button
+                                    onClick={() => toggleYear(year)}
+                                    className="w-full px-8 py-6 flex items-center justify-between hover:bg-slate-50 transition-all group"
                                 >
-                                    <td className="px-8 py-5">
-                                        <div className="flex items-center">
-                                            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 mr-4 font-bold">
-                                                {project.name.charAt(0)}
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-bold text-slate-900">{project.name}</p>
-                                                <p className="text-xs text-slate-400 truncate max-w-[200px]">{project.description}</p>
-                                            </div>
+                                    <div className="flex items-center space-x-4">
+                                        <ChevronRight
+                                            size={24}
+                                            className={`text-slate-400 transition-transform duration-200 ${isExpanded ? 'rotate-90 text-blue-600' : ''}`}
+                                        />
+                                        <h3 className="text-2xl font-black text-slate-900">{year}</h3>
+                                        <div className="flex items-center space-x-6 text-sm font-bold ml-6">
+                                            <span className="text-slate-500">
+                                                Total Projects: <span className="text-blue-600">{yearStats.total}</span>
+                                            </span>
+                                            <span className="text-slate-500 hidden md:inline">|</span>
+                                            <span className="text-slate-500 hidden md:inline">
+                                                Active: <span className="text-green-600">{yearStats.active}</span>
+                                            </span>
+                                            <span className="text-slate-500 hidden md:inline">|</span>
+                                            <span className="text-slate-500 hidden md:inline">
+                                                Closed: <span className="text-slate-400">{yearStats.closed}</span>
+                                            </span>
                                         </div>
-                                    </td>
-                                    <td className="px-6 py-5">
-                                        <div className="flex items-center text-sm font-medium text-slate-600">
-                                            <Building2 size={16} className="mr-2 text-slate-400" />
-                                            {project.companyName || '-'}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-5 text-xs font-medium text-slate-500">
-                                        <div className="flex flex-col mb-1 text-slate-700">
-                                            <span className="flex items-center mb-1"><Calendar size={12} className="mr-1.5 text-slate-300" /> Start: {project.startDate || 'N/A'}</span>
-                                            <span className="flex items-center"><Clock size={12} className="mr-1.5 text-slate-300" /> End: {project.endDate || 'N/A'}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-5">
-                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${project.type === ProjectType.VENDOR ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
-                                            {project.type || ProjectType.IN_HOUSE}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-5">
-                                        {project.type === ProjectType.VENDOR ? (
-                                            <div className="flex flex-col">
-                                                <span className="text-[10px] font-bold text-slate-900 leading-none mb-1">₹{project.commercialDetails?.client?.projectCost || 0}</span>
-                                                <span className={`text-[9px] font-black ${project.commercialDetails?.marginPercent && project.commercialDetails.marginPercent > 0 ? 'text-emerald-500' : 'text-amber-500'}`}>
-                                                    {project.commercialDetails?.marginPercent || 0}% Margin
-                                                </span>
+                                    </div>
+                                    <div className="text-xs text-slate-400 font-bold">
+                                        {isExpanded ? 'Click to collapse' : 'Click to expand'}
+                                    </div>
+                                </button>
+
+                                {/* Projects List (Expandable) */}
+                                {isExpanded && (
+                                    <div className="border-t border-slate-100">
+                                        {viewMode === 'grid' ? (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 p-6">
+                                                {yearProjects.map((project) => (
+                                                    <div
+                                                        key={project.id}
+                                                        onClick={() => handleOpenEdit(project)}
+                                                        className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm hover:shadow-lg transition-all group cursor-pointer relative overflow-hidden"
+                                                    >
+                                                        <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-slate-50 to-slate-100 rounded-bl-[2rem] -mr-4 -mt-4 transition-transform group-hover:scale-110`}></div>
+
+                                                        <div className="relative">
+                                                            <div className="flex justify-between items-start mb-6">
+                                                                <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 shadow-sm">
+                                                                    <ClipboardList size={28} />
+                                                                </div>
+                                                                <div className="flex flex-col items-end gap-2">
+                                                                    <StatusBadge status={project.status} />
+                                                                    <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${project.type === ProjectType.VENDOR ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
+                                                                        {project.type || ProjectType.IN_HOUSE}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+
+                                                            <h3 className="text-xl font-black text-slate-900 mb-2 truncate" title={project.name}>{project.name}</h3>
+                                                            <p className="text-slate-500 text-sm leading-relaxed mb-6 line-clamp-2 h-10">
+                                                                {project.description || 'No description provided.'}
+                                                            </p>
+
+                                                            <div className="space-y-3 pt-6 border-t border-slate-100">
+                                                                <div className="flex items-center justify-between text-xs font-bold text-slate-400">
+                                                                    <div className="flex items-center">
+                                                                        <Building2 size={14} className="mr-2 text-slate-300" />
+                                                                        <span className="uppercase tracking-wider truncate">{project.companyName || 'Unknown Company'}</span>
+                                                                    </div>
+                                                                    {project.type === ProjectType.VENDOR && project.vendorDetails?.vendorName && (
+                                                                        <span className="text-[9px] text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 truncate max-w-[120px]">
+                                                                            {project.vendorDetails.vendorName}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="flex items-center text-xs font-bold text-slate-400">
+                                                                        <Calendar size={14} className="mr-2 text-slate-300" />
+                                                                        <span>{project.startDate || 'N/A'}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center text-xs font-bold text-slate-400">
+                                                                        <UserIcon size={14} className="mr-2 text-slate-300" />
+                                                                        <span>{project.createdBy}</span>
+                                                                    </div>
+                                                                </div>
+
+                                                                {project.type === ProjectType.VENDOR && (
+                                                                    <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-slate-50">
+                                                                        <div className="bg-slate-50 p-2 rounded-xl">
+                                                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Billing</p>
+                                                                            <p className="text-xs font-black text-slate-900">₹{project.commercialDetails?.client?.projectCost || 0}</p>
+                                                                        </div>
+                                                                        <div className="bg-slate-50 p-2 rounded-xl">
+                                                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Margin</p>
+                                                                            <p className={`text-xs font-black ${project.commercialDetails?.marginPercent && project.commercialDetails.marginPercent > 0 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                                                                                {project.commercialDetails?.marginPercent || 0}%
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         ) : (
-                                            <span className="text-xs text-slate-300 font-bold">N/A</span>
+                                            <table className="w-full">
+                                                <thead className="bg-slate-50 border-b border-slate-100">
+                                                    <tr>
+                                                        <th className="px-8 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Project Name</th>
+                                                        <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Client</th>
+                                                        <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Dates</th>
+                                                        <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Type</th>
+                                                        <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Financials</th>
+                                                        <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
+                                                        <th className="px-6 py-5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Owner</th>
+                                                        <th className="px-6 py-5 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {yearProjects.map((project) => (
+                                                        <tr
+                                                            key={project.id}
+                                                            onClick={() => handleOpenEdit(project)}
+                                                            className="hover:bg-slate-50/50 transition-colors cursor-pointer group"
+                                                        >
+                                                            <td className="px-8 py-5">
+                                                                <div className="flex items-center">
+                                                                    <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 mr-4 font-bold">
+                                                                        {project.name.charAt(0)}
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-sm font-bold text-slate-900">{project.name}</p>
+                                                                        <p className="text-xs text-slate-400 truncate max-w-[200px]">{project.description}</p>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-5">
+                                                                <div className="flex items-center text-sm font-medium text-slate-600">
+                                                                    <Building2 size={16} className="mr-2 text-slate-400" />
+                                                                    {project.companyName || '-'}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-5 text-xs font-medium text-slate-500">
+                                                                <div className="flex flex-col mb-1 text-slate-700">
+                                                                    <span className="flex items-center mb-1"><Calendar size={12} className="mr-1.5 text-slate-300" /> Start: {project.startDate || 'N/A'}</span>
+                                                                    <span className="flex items-center"><Clock size={12} className="mr-1.5 text-slate-300" /> End: {project.endDate || 'N/A'}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-5">
+                                                                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${project.type === ProjectType.VENDOR ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
+                                                                    {project.type || ProjectType.IN_HOUSE}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-6 py-5">
+                                                                {project.type === ProjectType.VENDOR ? (
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-[10px] font-bold text-slate-900 leading-none mb-1">₹{project.commercialDetails?.client?.projectCost || 0}</span>
+                                                                        <span className={`text-[9px] font-black ${project.commercialDetails?.marginPercent && project.commercialDetails.marginPercent > 0 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                                                                            {project.commercialDetails?.marginPercent || 0}% Margin
+                                                                        </span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-xs text-slate-300 font-bold">N/A</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-5">
+                                                                <StatusBadge status={project.status} />
+                                                            </td>
+                                                            <td className="px-6 py-5">
+                                                                <div className="flex items-center text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded-lg inline-block">
+                                                                    <UserIcon size={12} className="mr-1.5" />
+                                                                    {project.createdBy}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-5 text-right">
+                                                                <button className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors">
+                                                                    <MoreHorizontal size={18} />
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
                                         )}
-                                    </td>
-                                    <td className="px-6 py-5">
-                                        <StatusBadge status={project.status} />
-                                    </td>
-                                    <td className="px-6 py-5">
-                                        <div className="flex items-center text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded-lg inline-block">
-                                            <UserIcon size={12} className="mr-1.5" />
-                                            {project.createdBy}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-5 text-right">
-                                        <button className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors">
-                                            <MoreHorizontal size={18} />
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             )}
 

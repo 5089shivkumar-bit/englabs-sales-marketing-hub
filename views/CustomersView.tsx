@@ -22,7 +22,9 @@ import {
   Fingerprint,
   RefreshCw,
   PencilLine,
-  Download
+  Download,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -47,6 +49,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Form State for Add/Edit
   const [formCust, setFormCust] = useState({
@@ -96,8 +99,61 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
       if (selectedCustomer?.id === id) {
         setSelectedCustomer(null);
       }
+      // Remove from selected IDs
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
       // Execute global state deletion
       onDeleteCustomer(id);
+    }
+  };
+
+  // Toggle individual selection
+  const handleToggleSelect = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Select all visible customers
+  const handleSelectAll = () => {
+    if (selectedIds.size === filteredCustomers.length) {
+      // Deselect all
+      setSelectedIds(new Set());
+    } else {
+      // Select all filtered
+      setSelectedIds(new Set(filteredCustomers.map(c => c.id)));
+    }
+  };
+
+  // Bulk delete selected customers
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+
+    const confirmed = window.confirm(
+      `BULK REGISTRY PURGE\n\n` +
+      `Personnel: ${currentUser.name}\n` +
+      `Target Count: ${selectedIds.size} clients\n\n` +
+      `This will permanently remove ${selectedIds.size} selected clients and all associated records from the database.\n\nAre you sure?`
+    );
+
+    if (confirmed) {
+      // Delete each selected customer
+      for (const id of selectedIds) {
+        onDeleteCustomer(id);
+      }
+      // Clear selection
+      setSelectedIds(new Set());
+      setSelectedCustomer(null);
     }
   };
 
@@ -321,97 +377,155 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
       </div>
 
       {/* Dynamic Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">National Client Directory</h2>
-          <p className="text-slate-500 font-medium">Enterprise data management for {customers.length} manufacturing accounts.</p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={() => {
-              setEditingCustomer(null);
-              setFormCust({ name: '', city: '', state: '', industry: '', annualTurnover: '', contactName: '', contactEmail: '', areaSector: '', pincode: '', status: 'Open' });
-              setShowAddModal(true);
-            }}
-            className="flex items-center px-8 py-4 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 text-sm font-black shadow-xl shadow-blue-500/20 transition-all active:scale-95"
-          >
-            <Plus size={20} className="mr-3" /> Register New Account
-          </button>
-        </div>
-      </div>
-
-      {/* Filters Overlay */}
-      <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm space-y-5">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-          <div className="flex items-center bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner overflow-x-auto no-scrollbar">
-            {ZONES.map(zone => {
-              const count = customers.filter(c => getZoneForCustomer(c) === zone || (zone === 'All Zones')).length;
-              return (
-                <button
-                  key={zone}
-                  onClick={() => setSelectedZone(zone)}
-                  className={`px-6 py-3 rounded-xl text-xs font-black whitespace-nowrap transition-all uppercase tracking-widest flex items-center space-x-2 ${selectedZone === zone
-                    ? 'bg-white text-blue-600 shadow-xl shadow-blue-500/10 ring-1 ring-slate-200'
-                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
-                    }`}
-                >
-                  <span>{zone}</span>
-                  {count > 0 && <span className={`px-2 py-0.5 rounded-lg text-[9px] ${selectedZone === zone ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'}`}>{count}</span>}
-                </button>
-              );
-            })}
+      <div className="sticky top-0 z-20 bg-slate-50 pt-4 pb-4 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">National Client Directory</h2>
+            <p className="text-slate-500 font-medium">Enterprise data management for {customers.length} manufacturing accounts.</p>
           </div>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => {
+                setEditingCustomer(null);
+                setFormCust({ name: '', city: '', state: '', industry: '', annualTurnover: '', contactName: '', contactEmail: '', areaSector: '', pincode: '', status: 'Open' });
+                setShowAddModal(true);
+              }}
+              className="flex items-center px-8 py-4 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 text-sm font-black shadow-xl shadow-blue-500/20 transition-all active:scale-95"
+            >
+              <Plus size={20} className="mr-3" /> Register New Account
+            </button>
+          </div>
+        </div>
 
-          <div className="relative flex-1 max-w-lg flex items-center gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input
-                type="text"
-                placeholder="Search by company, city, state..."
-                className="w-full pl-12 pr-6 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+        {/* Filters Overlay */}
+        <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm space-y-5">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+            <div className="flex items-center bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner overflow-x-auto no-scrollbar">
+              {ZONES.map(zone => {
+                const count = customers.filter(c => getZoneForCustomer(c) === zone || (zone === 'All Zones')).length;
+                return (
+                  <button
+                    key={zone}
+                    onClick={() => setSelectedZone(zone)}
+                    className={`px-6 py-3 rounded-xl text-xs font-black whitespace-nowrap transition-all uppercase tracking-widest flex items-center space-x-2 ${selectedZone === zone
+                      ? 'bg-white text-blue-600 shadow-xl shadow-blue-500/10 ring-1 ring-slate-200'
+                      : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                      }`}
+                  >
+                    <span>{zone}</span>
+                    {count > 0 && <span className={`px-2 py-0.5 rounded-lg text-[9px] ${selectedZone === zone ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'}`}>{count}</span>}
+                  </button>
+                );
+              })}
             </div>
-            <button
-              onClick={handleExportExcel}
-              className="p-3 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm flex items-center gap-2 font-black text-[10px] uppercase"
-              title="Export to Excel"
-            >
-              <Download size={16} /> XL
-            </button>
-            <button
-              onClick={handleExportPDF}
-              className="p-3 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl hover:bg-rose-600 hover:text-white transition-all shadow-sm flex items-center gap-2 font-black text-[10px] uppercase"
-              title="Export to PDF"
-            >
-              <Download size={16} /> PDF
-            </button>
+
+            <div className="relative flex-1 max-w-lg flex items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                  type="text"
+                  placeholder="Search by company, city, state..."
+                  className="w-full pl-12 pr-6 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <button
+                onClick={handleExportExcel}
+                className="p-3 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm flex items-center gap-2 font-black text-[10px] uppercase"
+                title="Export to Excel"
+              >
+                <Download size={16} /> XL
+              </button>
+              <button
+                onClick={handleExportPDF}
+                className="p-3 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl hover:bg-rose-600 hover:text-white transition-all shadow-sm flex items-center gap-2 font-black text-[10px] uppercase"
+                title="Export to PDF"
+              >
+                <Download size={16} /> PDF
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 pb-32">
         <div className={`${selectedCustomer ? 'xl:col-span-8' : 'xl:col-span-12'} transition-all duration-300`}>
+          {/* Bulk Action Bar */}
+          {selectedIds.size > 0 && (
+            <div className="mb-4 bg-blue-600 rounded-2xl p-4 flex items-center justify-between animate-in slide-in-from-top duration-300 shadow-xl shadow-blue-500/20">
+              <div className="flex items-center space-x-4">
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                  <CheckSquare size={20} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-white font-black text-sm">{selectedIds.size} Customers Selected</p>
+                  <p className="text-blue-200 text-[10px] font-bold uppercase tracking-widest">Bulk Actions Available</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  className="px-4 py-2 bg-white/10 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-white/20 transition-all"
+                >
+                  Clear Selection
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  className="px-6 py-3 bg-rose-500 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-rose-600 transition-all flex items-center shadow-lg active:scale-95"
+                >
+                  <Trash2 size={16} className="mr-2" />
+                  Delete Selected
+                </button>
+              </div>
+            </div>
+          )}
           <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-slate-100 text-slate-400 uppercase text-[10px] font-black tracking-widest bg-slate-50/30">
-                    <th className="px-8 py-6">Client Identity</th>
-                    <th className="px-8 py-6">Sector / Vertical</th>
-                    <th className="px-8 py-6 text-center">Revenue (Cr)</th>
-                    <th className="px-8 py-6 text-center">Operational Access</th>
+                    <th className="px-4 py-6 w-12">
+                      <button
+                        onClick={handleSelectAll}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 transition-all"
+                        title={selectedIds.size === filteredCustomers.length ? "Deselect All" : "Select All"}
+                      >
+                        {selectedIds.size === filteredCustomers.length && filteredCustomers.length > 0 ? (
+                          <CheckSquare size={18} className="text-blue-600" />
+                        ) : selectedIds.size > 0 ? (
+                          <div className="w-4 h-4 border-2 border-blue-600 rounded bg-blue-600/20" />
+                        ) : (
+                          <Square size={18} className="text-slate-300" />
+                        )}
+                      </button>
+                    </th>
+                    <th className="px-6 py-6">Client Identity</th>
+                    <th className="px-6 py-6">Sector / Vertical</th>
+                    <th className="px-6 py-6 text-center">Revenue (Cr)</th>
+                    <th className="px-6 py-6 text-center">Operational Access</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredCustomers.map(customer => (
                     <tr
                       key={customer.id}
-                      className={`hover:bg-slate-50/50 cursor-pointer transition-colors group ${selectedCustomer?.id === customer.id ? 'bg-blue-50/40' : ''}`}
+                      className={`hover:bg-slate-50/50 cursor-pointer transition-colors group ${selectedCustomer?.id === customer.id ? 'bg-blue-50/40' : ''} ${selectedIds.has(customer.id) ? 'bg-blue-50/60' : ''}`}
                       onClick={() => setSelectedCustomer(customer)}
                     >
-                      <td className="px-8 py-5">
+                      <td className="px-4 py-5 w-12">
+                        <button
+                          onClick={(e) => handleToggleSelect(e, customer.id)}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 transition-all"
+                        >
+                          {selectedIds.has(customer.id) ? (
+                            <CheckSquare size={18} className="text-blue-600" />
+                          ) : (
+                            <Square size={18} className="text-slate-300 group-hover:text-slate-400" />
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-6 py-5">
                         <div className="flex items-center space-x-4">
                           <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center font-black text-slate-500 text-base shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-all">
                             {customer.name?.substring(0, 2).toUpperCase()}
@@ -422,15 +536,15 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                           </div>
                         </div>
                       </td>
-                      <td className="px-8 py-5">
+                      <td className="px-6 py-5">
                         <span className="px-3 py-1 bg-slate-50 text-slate-500 rounded-lg text-[10px] font-black uppercase tracking-tight border border-slate-100">
                           {customer.industry || 'General Mfg'}
                         </span>
                       </td>
-                      <td className="px-8 py-5 text-center text-sm font-black text-slate-900">
+                      <td className="px-6 py-5 text-center text-sm font-black text-slate-900">
                         {formatRevenue(customer.annualTurnover)}
                       </td>
-                      <td className="px-8 py-5">
+                      <td className="px-6 py-5">
                         <div className="flex items-center justify-center space-x-3">
                           {/* Exact Styling from Screenshot: Pen/Edit Icon */}
                           <button
@@ -454,7 +568,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                   ))}
                   {filteredCustomers.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-8 py-20 text-center opacity-40">
+                      <td colSpan={5} className="px-8 py-20 text-center opacity-40">
                         <p className="font-black uppercase text-xs tracking-[0.2em] text-slate-400">No Registry Matches Found</p>
                       </td>
                     </tr>
@@ -468,21 +582,21 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
         {selectedCustomer && (
           <div className="xl:col-span-4 space-y-6 animate-in slide-in-from-right duration-300">
             <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-2xl sticky top-4 max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col">
-              <div className="p-10 bg-slate-900 text-white relative flex-shrink-0">
-                <button className="absolute top-8 right-8 p-2.5 hover:bg-white/10 rounded-full transition-colors" onClick={() => setSelectedCustomer(null)}>
-                  <X size={24} />
+              <div className="p-6 bg-slate-900 text-white relative flex-shrink-0">
+                <button className="absolute top-4 right-4 p-2 hover:bg-white/10 rounded-full transition-colors" onClick={() => setSelectedCustomer(null)}>
+                  <X size={20} />
                 </button>
-                <div className="w-20 h-20 rounded-3xl bg-blue-600 flex items-center justify-center text-3xl font-black uppercase shadow-2xl ring-4 ring-white/10 mb-8">
+                <div className="w-16 h-16 rounded-2xl bg-blue-600 flex items-center justify-center text-2xl font-black uppercase shadow-2xl ring-4 ring-white/10 mb-4">
                   {selectedCustomer.name?.charAt(0)}
                 </div>
-                <h3 className="text-2xl font-black leading-tight mb-2">{selectedCustomer.name}</h3>
-                <p className="text-blue-400 text-[11px] uppercase tracking-[0.2em] font-black">{selectedCustomer.industry}</p>
+                <h3 className="text-xl font-black leading-tight mb-1">{selectedCustomer.name}</h3>
+                <p className="text-blue-400 text-[10px] uppercase tracking-[0.2em] font-black">{selectedCustomer.industry}</p>
               </div>
 
-              <div className="p-10 space-y-10 overflow-y-auto flex-1">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100">
-                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Hub Hub</p>
+              <div className="p-6 space-y-6 overflow-y-auto flex-1">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">Hub Hub</p>
                     <p className="text-sm font-bold text-slate-900">{selectedCustomer.city}</p>
                     {(selectedCustomer.areaSector || selectedCustomer.pincode) && (
                       <p className="text-xs text-slate-500 font-medium mt-1">
@@ -490,45 +604,45 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                       </p>
                     )}
                   </div>
-                  <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100">
-                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Cr Revenue</p>
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">Cr Revenue</p>
                     <p className="text-sm font-bold text-slate-900">{formatRevenue(selectedCustomer.annualTurnover)}</p>
                   </div>
                 </div>
 
-                <div className="pt-8 border-t border-slate-100">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center">
-                    <ShieldCheck size={14} className="mr-2 text-blue-500" /> Authorized Entry Log
+                <div className="pt-4 border-t border-slate-100">
+                  <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center">
+                    <ShieldCheck size={12} className="mr-2 text-blue-500" /> Authorized Entry Log
                   </h4>
-                  <div className="p-5 bg-blue-50/50 border border-blue-100 rounded-3xl">
-                    <div className="flex items-center space-x-4 mb-4">
-                      <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white shadow-lg">
-                        <Fingerprint size={18} />
+                  <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
+                    <div className="flex items-center space-x-3 mb-3">
+                      <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white shadow-lg">
+                        <Fingerprint size={16} />
                       </div>
                       <div>
-                        <p className="text-[10px] text-blue-400 font-black uppercase tracking-tighter">Last Modified By</p>
+                        <p className="text-[9px] text-blue-400 font-black uppercase tracking-tighter">Last Modified By</p>
                         <p className="text-sm font-black text-slate-900">{selectedCustomer.lastModifiedBy || 'Master Registry'}</p>
                       </div>
                     </div>
                     <div className="flex items-center text-xs text-slate-500 font-bold">
-                      <Clock size={14} className="mr-2" />
+                      <Clock size={12} className="mr-2" />
                       {selectedCustomer.updatedAt || 'Initial Sync'}
                     </div>
                   </div>
                 </div>
 
-                <div className="pt-10 grid grid-cols-2 gap-4">
+                <div className="pt-4 grid grid-cols-2 gap-3">
                   <button
                     onClick={(e) => handleOpenEdit(e, selectedCustomer)}
-                    className="py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center justify-center shadow-xl active:scale-95"
+                    className="py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center justify-center shadow-xl active:scale-95"
                   >
-                    <Edit3 size={16} className="mr-3" /> Update Record
+                    <Edit3 size={14} className="mr-2" /> Update
                   </button>
                   <button
                     onClick={(e) => handleActionDelete(e, selectedCustomer.id)}
-                    className="py-5 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center justify-center shadow-xl shadow-rose-200 active:scale-95"
+                    className="py-3 bg-rose-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center justify-center shadow-xl shadow-rose-200 active:scale-95"
                   >
-                    <Trash2 size={16} className="mr-3" /> Purge Client
+                    <Trash2 size={14} className="mr-2" /> Delete
                   </button>
                 </div>
               </div>

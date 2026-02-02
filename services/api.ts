@@ -262,7 +262,34 @@ export const api = {
         },
 
         async bulkDelete(ids: string[]): Promise<void> {
-            const { error } = await supabase.from('customers').delete().in('id', ids);
+            if (!ids || ids.length === 0) return;
+
+            // Filter to only valid UUIDs (Supabase uses UUID format)
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            const validIds = ids.filter(id => id && typeof id === 'string' && uuidRegex.test(id));
+
+            if (validIds.length === 0) {
+                console.warn("No valid UUIDs found in customer IDs to delete:", ids);
+                return;
+            }
+
+            console.log(`Deleting ${validIds.length} customers (filtered from ${ids.length} total IDs)`);
+
+            // Delete related records first to avoid foreign key constraint errors
+            try {
+                // Delete related contacts
+                const { error: contactsError } = await supabase.from('contacts').delete().in('customer_id', validIds);
+                if (contactsError) console.warn("Error deleting contacts:", contactsError);
+
+                // Delete related pricing history
+                const { error: pricingError } = await supabase.from('pricing_history').delete().in('customer_id', validIds);
+                if (pricingError) console.warn("Error deleting pricing_history:", pricingError);
+            } catch (err) {
+                console.warn("Error cleaning up related records:", err);
+            }
+
+            // Now delete the customers
+            const { error } = await supabase.from('customers').delete().in('id', validIds);
             if (error) throw error;
         }
     },
@@ -432,7 +459,18 @@ export const api = {
         },
 
         async bulkDelete(ids: string[]): Promise<void> {
-            const { error } = await supabase.from('expos').delete().in('id', ids);
+            if (!ids || ids.length === 0) return;
+
+            // Filter to only valid UUIDs
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            const validIds = ids.filter(id => id && typeof id === 'string' && uuidRegex.test(id));
+
+            if (validIds.length === 0) {
+                console.warn("No valid UUIDs found in expo IDs to delete:", ids);
+                return;
+            }
+
+            const { error } = await supabase.from('expos').delete().in('id', validIds);
             if (error) throw error;
         }
     },
@@ -629,7 +667,18 @@ export const api = {
         },
 
         async bulkDelete(ids: string[]): Promise<void> {
-            const { error } = await supabase.from('projects').delete().in('id', ids);
+            if (!ids || ids.length === 0) return;
+
+            // Filter to only valid UUIDs
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            const validIds = ids.filter(id => id && typeof id === 'string' && uuidRegex.test(id));
+
+            if (validIds.length === 0) {
+                console.warn("No valid UUIDs found in project IDs to delete:", ids);
+                return;
+            }
+
+            const { error } = await supabase.from('projects').delete().in('id', validIds);
             if (error) throw error;
         }
     },

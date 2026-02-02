@@ -4,7 +4,7 @@ import { Upload, X, CheckCircle2, AlertCircle, ArrowRight, Download, FileSpreads
 import { excelService } from '../services/excelService';
 
 interface ExcelImporterProps {
-  type?: 'customers' | 'pricing' | 'expos';
+  type?: 'customers' | 'pricing' | 'expos' | 'projects';
   onImport: (mappedData: any[], importType: string) => void;
   onClose: () => void;
   targetFields?: { key: string, label: string, required?: boolean }[];
@@ -44,6 +44,19 @@ const IMPORT_CONFIGS: Record<string, { label: string, fields: { key: string, lab
       { key: 'region', label: 'Region' }
     ]
   },
+  projects: {
+    label: 'Projects',
+    fields: [
+      { key: 'name', label: 'Project Name', required: true },
+      { key: 'companyName', label: 'Company Name', required: true },
+      { key: 'description', label: 'Description' },
+      { key: 'startDate', label: 'Start Date', required: true },
+      { key: 'endDate', label: 'End Date' },
+      { key: 'status', label: 'Status (Active/Completed/On Hold)' },
+      { key: 'type', label: 'Project Type (IN_HOUSE/VENDOR)' },
+      { key: 'location', label: 'Location' }
+    ]
+  },
   automatic: {
     label: '⚡ Anti-Gravity Auto',
     fields: [
@@ -64,7 +77,7 @@ export const ExcelImporter: React.FC<ExcelImporterProps> = ({ type: initialType,
   const [rawData, setRawData] = useState<any[]>([]);
   const [step, setStep] = useState<'upload' | 'mapping' | 'preview' | 'success'>('upload');
   const [mapping, setMapping] = useState<Record<string, string>>({});
-  const [importType, setImportType] = useState<'customers' | 'pricing' | 'expos' | 'automatic'>(initialType || 'customers');
+  const [importType, setImportType] = useState<'customers' | 'pricing' | 'expos' | 'projects' | 'automatic'>(initialType || 'customers');
   const [processedData, setProcessedData] = useState<any[]>([]);
   const [duplicates, setDuplicates] = useState<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -160,8 +173,8 @@ export const ExcelImporter: React.FC<ExcelImporterProps> = ({ type: initialType,
         <div className="p-10">
           {step === 'upload' && (
             <div className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                {['customers', 'pricing', 'expos', 'automatic'].map((t) => (
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+                {['customers', 'pricing', 'expos', 'projects', 'automatic'].map((t) => (
                   <button
                     key={t}
                     onClick={() => setImportType(t as any)}
