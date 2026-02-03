@@ -350,6 +350,7 @@ export interface Project {
   createdBy: string;
   companyName: string;
   location?: string;
+  totalValue?: number;
   vendorDetails?: VendorDetails;
   commercialDetails?: CommercialDetails;
   updatedAt?: string;

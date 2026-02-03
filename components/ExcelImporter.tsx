@@ -54,7 +54,8 @@ const IMPORT_CONFIGS: Record<string, { label: string, fields: { key: string, lab
       { key: 'endDate', label: 'End Date' },
       { key: 'status', label: 'Status (Active/Completed/On Hold)' },
       { key: 'type', label: 'Project Type (IN_HOUSE/VENDOR)' },
-      { key: 'location', label: 'Location' }
+      { key: 'location', label: 'Location' },
+      { key: 'totalValue', label: 'Value' }
     ]
   },
   automatic: {

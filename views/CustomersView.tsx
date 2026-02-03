@@ -581,21 +581,21 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
 
         {selectedCustomer && (
           <div className="xl:col-span-4 space-y-6 animate-in slide-in-from-right duration-300">
-            <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-2xl sticky top-4 max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col">
-              <div className="p-6 bg-slate-900 text-white relative flex-shrink-0">
+            <div className="bg-white rounded-[2rem] border border-slate-200 shadow-2xl sticky top-48 max-h-[calc(100vh-14rem)] overflow-hidden flex flex-col">
+              <div className="p-5 bg-slate-900 text-white relative flex-shrink-0">
                 <button className="absolute top-4 right-4 p-2 hover:bg-white/10 rounded-full transition-colors" onClick={() => setSelectedCustomer(null)}>
-                  <X size={20} />
+                  <X size={18} />
                 </button>
-                <div className="w-16 h-16 rounded-2xl bg-blue-600 flex items-center justify-center text-2xl font-black uppercase shadow-2xl ring-4 ring-white/10 mb-4">
+                <div className="w-14 h-14 rounded-xl bg-blue-600 flex items-center justify-center text-xl font-black uppercase shadow-2xl ring-4 ring-white/10 mb-3">
                   {selectedCustomer.name?.charAt(0)}
                 </div>
-                <h3 className="text-xl font-black leading-tight mb-1">{selectedCustomer.name}</h3>
-                <p className="text-blue-400 text-[10px] uppercase tracking-[0.2em] font-black">{selectedCustomer.industry}</p>
+                <h3 className="text-lg font-black leading-tight mb-1">{selectedCustomer.name}</h3>
+                <p className="text-blue-400 text-[9px] uppercase tracking-[0.2em] font-black">{selectedCustomer.industry}</p>
               </div>
 
-              <div className="p-6 space-y-6 overflow-y-auto flex-1">
+              <div className="p-5 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                     <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">Hub Hub</p>
                     <p className="text-sm font-bold text-slate-900">{selectedCustomer.city}</p>
                     {(selectedCustomer.areaSector || selectedCustomer.pincode) && (
@@ -604,45 +604,45 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ customers, setCust
                       </p>
                     )}
                   </div>
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                     <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">Cr Revenue</p>
                     <p className="text-sm font-bold text-slate-900">{formatRevenue(selectedCustomer.annualTurnover)}</p>
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-slate-100">
-                  <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center">
+                <div className="pt-3 border-t border-slate-100">
+                  <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center">
                     <ShieldCheck size={12} className="mr-2 text-blue-500" /> Authorized Entry Log
                   </h4>
-                  <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
-                    <div className="flex items-center space-x-3 mb-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white shadow-lg">
-                        <Fingerprint size={16} />
+                  <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white shadow-lg">
+                        <Fingerprint size={14} />
                       </div>
                       <div>
                         <p className="text-[9px] text-blue-400 font-black uppercase tracking-tighter">Last Modified By</p>
-                        <p className="text-sm font-black text-slate-900">{selectedCustomer.lastModifiedBy || 'Master Registry'}</p>
+                        <p className="text-xs font-black text-slate-900">{selectedCustomer.lastModifiedBy || 'Master Registry'}</p>
                       </div>
                     </div>
-                    <div className="flex items-center text-xs text-slate-500 font-bold">
-                      <Clock size={12} className="mr-2" />
+                    <div className="flex items-center text-[10px] text-slate-500 font-bold">
+                      <Clock size={10} className="mr-1.5" />
                       {selectedCustomer.updatedAt || 'Initial Sync'}
                     </div>
                   </div>
                 </div>
 
-                <div className="pt-4 grid grid-cols-2 gap-3">
+                <div className="pt-2 grid grid-cols-2 gap-3">
                   <button
                     onClick={(e) => handleOpenEdit(e, selectedCustomer)}
-                    className="py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center justify-center shadow-xl active:scale-95"
+                    className="py-2.5 bg-slate-900 text-white rounded-lg font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center justify-center shadow-xl active:scale-95"
                   >
-                    <Edit3 size={14} className="mr-2" /> Update
+                    <Edit3 size={12} className="mr-2" /> Update
                   </button>
                   <button
                     onClick={(e) => handleActionDelete(e, selectedCustomer.id)}
-                    className="py-3 bg-rose-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center justify-center shadow-xl shadow-rose-200 active:scale-95"
+                    className="py-2.5 bg-rose-600 text-white rounded-lg font-black text-[10px] uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center justify-center shadow-xl shadow-rose-200 active:scale-95"
                   >
-                    <Trash2 size={14} className="mr-2" /> Delete
+                    <Trash2 size={12} className="mr-2" /> Delete
                   </button>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ClipboardList, Archive, FileText, CheckCircle2, User as UserIcon, Building2, Calendar, Clock, X, Plus, LayoutGrid, List as ListIcon, MoreHorizontal, Trash2, Save, Search, FileDown, FileUp, Download, Upload, ChevronRight } from 'lucide-react';
+import { ClipboardList, Archive, FileText, CheckCircle2, User as UserIcon, Building2, Calendar, Clock, X, Plus, LayoutGrid, List as ListIcon, MoreHorizontal, Trash2, Save, Search, FileDown, FileUp, Download, Upload, ChevronRight, ArrowLeft } from 'lucide-react';
 import { Project, ProjectStatus, ProjectType, User, Expense, Income, VendorDetails, Vendor, VendorType, CommercialDetails, ClientPayment, VendorPayment, ProjectDocument, DocumentCategory, DocumentTag, ActivityLog, ActivityType } from '../types';
 import { api } from '../services/api';
 import { dataService } from '../services/dataService';
@@ -1118,7 +1118,18 @@ export const ProjectDetailsView: React.FC = () => {
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                        <h2 className="text-3xl font-black text-slate-900 tracking-tight">Project Management</h2>
+                        <div className="flex items-center gap-3">
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    className="p-2 -ml-2 hover:bg-slate-200 rounded-full transition-colors text-slate-500 hover:text-slate-900"
+                                    title="Back to all projects"
+                                >
+                                    <ArrowLeft size={24} />
+                                </button>
+                            )}
+                            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Project Management</h2>
+                        </div>
                         <p className="text-slate-500 font-medium">Overview of active engineering projects.</p>
                     </div>
 
@@ -1329,6 +1340,15 @@ export const ProjectDetailsView: React.FC = () => {
                                                                         </div>
                                                                     </div>
                                                                 )}
+
+                                                                {project.type !== ProjectType.VENDOR && project.totalValue ? (
+                                                                    <div className="mt-4 pt-4 border-t border-slate-50">
+                                                                        <div className="bg-slate-50 p-2 rounded-xl inline-block min-w-[50%]">
+                                                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Project Value</p>
+                                                                            <p className="text-xs font-black text-slate-900">₹{project.totalValue.toLocaleString()}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                ) : null}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1392,7 +1412,11 @@ export const ProjectDetailsView: React.FC = () => {
                                                                         </span>
                                                                     </div>
                                                                 ) : (
-                                                                    <span className="text-xs text-slate-300 font-bold">N/A</span>
+                                                                    project.totalValue ? (
+                                                                        <span className="text-sm font-bold text-slate-900">₹{project.totalValue.toLocaleString()}</span>
+                                                                    ) : (
+                                                                        <span className="text-xs text-slate-300 font-bold">N/A</span>
+                                                                    )
                                                                 )}
                                                             </td>
                                                             <td className="px-6 py-5">

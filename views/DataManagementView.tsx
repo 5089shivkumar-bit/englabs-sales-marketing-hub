@@ -91,13 +91,32 @@ CHECK (status IN ('active', 'inactive', 'prospective', 'lead', 'churned', 'Open'
 
 -- Fix projects table schema
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS location TEXT;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS total_value NUMERIC DEFAULT 0;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'IN_HOUSE';
 ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_type_check;
 ALTER TABLE projects ADD CONSTRAINT projects_type_check 
 CHECK (type IN ('IN_HOUSE', 'VENDOR'));
 ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_status_check;
 ALTER TABLE projects ADD CONSTRAINT projects_status_check 
-CHECK (status IN ('Active', 'Completed', 'On Hold'));`;
+CHECK (status IN ('Active', 'Completed', 'On Hold'));
+-- Deduplicate Customers by Name
+WITH Duplicates AS (
+    SELECT 
+        id,
+        ROW_NUMBER() OVER (
+            PARTITION BY LOWER(TRIM(name)) 
+            ORDER BY updated_at DESC
+        ) as row_num
+    FROM 
+        customers
+)
+DELETE FROM customers
+WHERE id IN (
+    SELECT id 
+    FROM Duplicates 
+    WHERE row_num > 1
+);
+`;
 
   const handleDeleteLog = async (log: any) => {
     if (!confirm(`Are you sure you want to delete this sync record? This will remove ${log.count} records from the database.`)) {
@@ -421,6 +440,38 @@ CHECK (status IN ('Active', 'Completed', 'On Hold'));`;
 
         // If it's already a string, try to parse it
         if (typeof dateValue === 'string') {
+          // Check for DD/MM/YYYY or DD-MM-YYYY first (custom manual parse)
+          const dmyMatch = String(dateValue).match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
+          if (dmyMatch) {
+            const day = parseInt(dmyMatch[1]);
+            const month = parseInt(dmyMatch[2]);
+            let yearNum = parseInt(dmyMatch[3]);
+            if (yearNum < 100) yearNum += 2000; // Assume 20xx for 2-digit years
+
+            // Sanity check for year
+            if (yearNum > 1900 && yearNum < 2100) {
+              const date = new Date(yearNum, month - 1, day);
+              if (!isNaN(date.getTime())) {
+                const y = date.getFullYear();
+                const m = String(date.getMonth() + 1).padStart(2, '0');
+                const d = String(date.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+              }
+            }
+          }
+
+          // Check for DD-Mon-YY or DD-Mon-YYYY (e.g. 15-Jan-21)
+          const dMonYMatch = String(dateValue).match(/^(\d{1,2})[-/\s]([A-Za-z]{3})[-/\s](\d{2,4})$/);
+          if (dMonYMatch) {
+            const parsed = new Date(dateValue);
+            if (!isNaN(parsed.getTime())) {
+              const year = parsed.getFullYear();
+              const month = String(parsed.getMonth() + 1).padStart(2, '0');
+              const day = String(parsed.getDate()).padStart(2, '0');
+              return `${year}-${month}-${day}`;
+            }
+          }
+
           const parsed = new Date(dateValue);
           if (!isNaN(parsed.getTime())) {
             const year = parsed.getFullYear();
@@ -433,9 +484,14 @@ CHECK (status IN ('Active', 'Completed', 'On Hold'));`;
         // If it's a Date object
         if (dateValue instanceof Date && !isNaN(dateValue.getTime())) {
           const year = dateValue.getFullYear();
-          const month = String(dateValue.getMonth() + 1).padStart(2, '0');
-          const day = String(dateValue.getDate()).padStart(2, '0');
-          return `${year}-${month}-${day}`;
+          if (year < 1900 || year > 2100) {
+            console.warn(`Date parsing rejected year: ${year}. Defaulting to today.`);
+            // Fall through to default
+          } else {
+            const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+            const day = String(dateValue.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+          }
         }
 
         // If it's an Excel serial number (days since 1900-01-01)
@@ -452,7 +508,8 @@ CHECK (status IN ('Active', 'Completed', 'On Hold'));`;
           }
         }
 
-        // Fallback to today's date
+        // Fallback to today but LOG IT so we know it failed
+        console.warn(`Date parsing failed for value: "${dateValue}" (Format unknown). Defaulting to today.`);
         const today = new Date();
         const year = today.getFullYear();
         const month = String(today.getMonth() + 1).padStart(2, '0');
@@ -480,6 +537,7 @@ CHECK (status IN ('Active', 'Completed', 'On Hold'));`;
           status: projectStatus,
           type: projectType,
           location: String(row.location || '').trim(),
+          totalValue: parseFloat(row.totalValue) || 0,
           createdBy: 'Excel Import',
           updatedAt: new Date().toISOString()
         };
